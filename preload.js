@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('chud', {
   moveBy: (dx, dy) => ipcRenderer.send('win-move-by', { dx, dy }),
   dragState: (v) => ipcRenderer.send('drag-state', v),
   grab: () => ipcRenderer.invoke('win-grab'),
+  splat: () => ipcRenderer.send('splat-here'),
   menu: (state) => ipcRenderer.send('goblin-menu', state),
   onAgentDone: (cb) => ipcRenderer.on('agent-done', (e, d) => cb(d)),
   onMenuCmd: (cb) => ipcRenderer.on('menu-cmd', (e, d) => cb(d)),

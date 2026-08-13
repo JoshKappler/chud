@@ -43,9 +43,11 @@ window and every Space.
   damage stages: black eye, swollen eye, a nosebleed and lost tusk, a cut
   brow and notched ear, X eyes and a bleeding chin, mangled with splatter,
   bloodier, deathly pale, drenched, and finally his own skull. Each hit
-  plays a preset pained exclamation (assets/grunts, regenerate with
-  scripts/make-grunts.js), instant and offline. He heals one stage every
-  `healSeconds` (default 5). Alt + right click for the menu.
+  plays a crunch and a preset pained exclamation (assets/grunts,
+  regenerate with scripts/make-grunts.js), instant and offline, and
+  splats blood: behind him for a punch, smeared on the monitor edge for
+  a hard bounce, fading out after a few seconds. He heals one stage
+  every `healSeconds` (default 5). Alt + right click for the menu.
 - The session closes itself after `idleSeconds` with no voice (default 10).
 - The badge counts agent results that arrived while disconnected; he reports
   them next time you talk.

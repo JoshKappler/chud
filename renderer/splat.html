@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; background: transparent; overflow: hidden; }
+    canvas { image-rendering: pixelated; display: block; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+  // Seeded pixel blood splat hugging one wall (or radial for a punch),
+  // drips grow in, then the whole thing step-fades away.
+  const q = new URLSearchParams(location.search);
+  const edge = q.get('edge') || 'punch';
+  let seed = Number(q.get('seed') || 1);
+  const rng = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const canvas = document.getElementById('c');
+  const S = 4;
+  const size = Math.min(window.innerWidth, window.innerHeight);
+  canvas.width = size;
+  canvas.height = size;
+  const L = Math.floor(size / S);
+  const ctx = canvas.getContext('2d');
+  const COLORS = ['#a11f2f', '#6e1420', '#4a0d15'];
+
+  const cx = edge === 'left' ? 2 : edge === 'right' ? L - 3 : L / 2;
+  const cy = edge === 'top' ? 2 : edge === 'bottom' ? L - 3 : L / 2;
+
+  const dots = [];
+  for (let i = 0; i < 46; i++) {
+    const ang = rng() * Math.PI * 2;
+    const r = rng() * rng() * (L * 0.42);
+    let x = cx + Math.cos(ang) * r;
+    let y = cy + Math.sin(ang) * r;
+    if (edge === 'left') x = cx + Math.abs(Math.cos(ang)) * r * 0.9;
+    if (edge === 'right') x = cx - Math.abs(Math.cos(ang)) * r * 0.9;
+    if (edge === 'top') y = cy + Math.abs(Math.sin(ang)) * r * 0.9;
+    if (edge === 'bottom') y = cy - Math.abs(Math.sin(ang)) * r * 0.9;
+    dots.push([Math.round(x), Math.round(y), COLORS[Math.floor(rng() * 3)]]);
+  }
+  // thick smear along the wall itself
+  if (edge !== 'punch') {
+    for (let i = -8; i <= 8; i++) {
+      if (rng() < 0.85) {
+        const t = Math.floor(rng() * 3);
+        for (let d = 0; d <= t; d++) {
+          if (edge === 'left') dots.push([d, Math.round(cy + i), COLORS[d === 0 ? 1 : 0]]);
+          if (edge === 'right') dots.push([L - 1 - d, Math.round(cy + i), COLORS[d === 0 ? 1 : 0]]);
+          if (edge === 'top') dots.push([Math.round(cx + i), d, COLORS[d === 0 ? 1 : 0]]);
+          if (edge === 'bottom') dots.push([Math.round(cx + i), L - 1 - d, COLORS[d === 0 ? 1 : 0]]);
+        }
+      }
+    }
+  }
+  const drips = [];
+  const nDrips = 2 + Math.floor(rng() * 3);
+  for (let i = 0; i < nDrips; i++) {
+    const [dx, dy] = dots[Math.floor(rng() * dots.length)];
+    drips.push({ x: dx, y: dy, len: 4 + rng() * 9 });
+  }
+
+  const born = performance.now();
+  function draw(now) {
+    const age = (now - born) / 1000;
+    const grow = Math.min(1, age / 1.2);
+    const alpha = age < 2 ? 1 : Math.max(0, 1 - Math.floor((age - 2) * 3) * 0.2);
+    ctx.clearRect(0, 0, size, size);
+    ctx.globalAlpha = alpha;
+    for (const [x, y, c] of dots) {
+      ctx.fillStyle = c;
+      ctx.fillRect(x * S, y * S, S, S);
+    }
+    for (const d of drips) {
+      const n = Math.floor(d.len * grow);
+      for (let i = 0; i < n; i++) {
+        ctx.fillStyle = COLORS[i > d.len * 0.6 ? 1 : 0];
+        if (edge === 'bottom') ctx.fillRect((d.x + i) * S, d.y * S, S, S);
+        else ctx.fillRect(d.x * S, (d.y + i) * S, S, S);
+      }
+    }
+    if (alpha > 0) requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+</script>
+</body>
+</html>

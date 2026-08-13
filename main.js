@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, protocol, net, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, protocol, net, screen, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -6,6 +6,7 @@ const session = require('./lib/session');
 const tools = require('./lib/tools');
 const wakewatch = require('./lib/wakewatch');
 const drift = require('./lib/drift');
+const splat = require('./lib/splat');
 
 const ROOT = __dirname;
 const SCREENSHOT = process.env.CHUD_SCREENSHOT || '';
@@ -50,8 +51,10 @@ function createWindow() {
   const badge = process.env.CHUD_BADGE || '';
   const emote = encodeURIComponent(process.env.CHUD_EMOTE || '');
   const damage = process.env.CHUD_DAMAGE || '';
-  const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}` : '';
-  win.loadURL(`chud://app/renderer/index.html${qs}`);
+  const page = process.env.CHUD_PAGE || 'index';
+  const edge = process.env.CHUD_EDGE || 'punch';
+  const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}&edge=${edge}&seed=7` : '';
+  win.loadURL(`chud://app/renderer/${page}.html${qs}`);
   if (!SCREENSHOT) drift.start(win);
 
   if (SCREENSHOT) {
@@ -80,7 +83,8 @@ app.whenReady().then(async () => {
   tools.setNotify((payload) => {
     if (win && !win.isDestroyed()) win.webContents.send('agent-done', payload);
   });
-  drift.setOnBounce(() => {
+  drift.setOnBounce((hit) => {
+    splat.show(hit.edge, hit.ix, hit.iy, hit.wa);
     if (win && !win.isDestroyed()) win.webContents.send('bounce-hurt');
   });
 
@@ -117,6 +121,13 @@ ipcMain.on('win-move-by', (e, { dx, dy }) => {
   drift.noteMove(dx, dy);
   const [x, y] = win.getPosition();
   win.setPosition(Math.round(x + dx), Math.round(y + dy));
+});
+
+ipcMain.on('splat-here', () => {
+  if (!win || win.isDestroyed()) return;
+  const b = win.getBounds();
+  const wa = screen.getDisplayMatching(b).workArea;
+  splat.show('punch', b.x + b.width / 2, b.y + b.height / 2, wa);
 });
 
 ipcMain.on('goblin-menu', (e, state) => {
