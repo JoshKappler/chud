@@ -54,13 +54,30 @@ const VoiceFX = (() => {
   }
 
   let gruntSrc = null;
+  let playSeq = 0;
+  const bufCache = new Map();
 
+  function loadBuffer(url) {
+    if (!bufCache.has(url)) {
+      const p = fetch(url)
+        .then((res) => res.arrayBuffer())
+        .then((raw) => ctx.decodeAudioData(raw));
+      p.catch(() => bufCache.delete(url));
+      bufCache.set(url, p);
+    }
+    return bufCache.get(url);
+  }
+
+  // A new call silences the current line at once and supersedes any older
+  // call still decoding, so the freshest impact always wins.
   async function playUrl(url) {
-    const res = await fetch(url);
-    const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+    const seq = ++playSeq;
     if (gruntSrc) {
       try { gruntSrc.stop(); } catch (e) { /* already ended */ }
+      gruntSrc = null;
     }
+    const buf = await loadBuffer(url);
+    if (seq !== playSeq) return;
     const src = ctx.createBufferSource();
     gruntSrc = src;
     src.buffer = buf;
@@ -74,6 +91,7 @@ const VoiceFX = (() => {
     attachStream,
     detachStream,
     playUrl,
+    preload: loadBuffer,
     getCtx: () => ctx,
     getBus: () => bus,
     onLevel: (cb) => { levelCb = cb; },

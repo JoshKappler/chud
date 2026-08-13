@@ -393,7 +393,7 @@ const Goblin = (() => {
     setLevel: (v) => { level = v; },
     setBadge: (n) => { badge = n; },
     setEmote: (s) => { emote = s; },
-    setHealSeconds: (s) => { healMs = Math.max(10, s) * 1000; },
+    setHealSeconds: (s) => { healMs = Math.max(1, s) * 1000; },
     getDamage: () => damage,
     setDamage: (n) => {
       const grew = n > damage;

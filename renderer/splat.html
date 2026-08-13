@@ -89,6 +89,31 @@
     });
   }
 
+  // bone shards: pale 2px chips thrown harder and heavier than droplets
+  const BONE = ['#f5efd7', '#d8cfb2'];
+  const shards = [];
+  const nShards = 3 + Math.floor(rng() * 4);
+  for (let i = 0; i < nShards; i++) {
+    let ang;
+    if (edge === 'left') ang = (rng() - 0.5) * 1.4;
+    else if (edge === 'right') ang = Math.PI + (rng() - 0.5) * 1.4;
+    else if (edge === 'top') ang = Math.PI / 2 + (rng() - 0.5) * 1.4;
+    else if (edge === 'bottom') ang = -Math.PI / 2 + (rng() - 0.5) * 1.4;
+    else ang = rng() * Math.PI * 2;
+    const sp = 20 + rng() * 70;
+    const flat = rng() < 0.5;
+    shards.push({
+      x: cx, y: cy,
+      vx: Math.cos(ang) * sp,
+      vy: Math.sin(ang) * sp,
+      life: 0.25 + rng() * 0.35,
+      c: BONE[Math.floor(rng() * 2)],
+      w: flat ? 2 : 1,
+      h: flat ? 1 : 2,
+      dead: false,
+    });
+  }
+
   const born = performance.now();
   let lastT = born;
   function draw(now) {
@@ -112,6 +137,24 @@
       }
     }
 
+    for (const p of shards) {
+      if (p.dead) continue;
+      p.vy += 200 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.dead = true;
+        for (let ix = 0; ix < p.w; ix++) {
+          for (let iy = 0; iy < p.h; iy++) {
+            const gx = Math.round(p.x) + ix;
+            const gy = Math.round(p.y) + iy;
+            if (gx >= 0 && gx < L && gy >= 0 && gy < L) dots.push([gx, gy, p.c]);
+          }
+        }
+      }
+    }
+
     ctx.clearRect(0, 0, size, size);
     ctx.globalAlpha = alpha;
     for (const [x, y, c] of dots) {
@@ -122,6 +165,11 @@
       if (p.dead) continue;
       ctx.fillStyle = p.c;
       ctx.fillRect(Math.round(p.x) * S, Math.round(p.y) * S, S, S);
+    }
+    for (const p of shards) {
+      if (p.dead) continue;
+      ctx.fillStyle = p.c;
+      ctx.fillRect(Math.round(p.x) * S, Math.round(p.y) * S, p.w * S, p.h * S);
     }
     for (const d of drips) {
       const n = Math.floor(d.len * grow);

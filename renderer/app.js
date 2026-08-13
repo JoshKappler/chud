@@ -39,6 +39,12 @@
   }
 
   VoiceFX.ensure(cfg);
+  // Warm the scream bank so the first flurry never waits on fetch+decode.
+  for (let band = 1; band <= 4; band++) {
+    for (let v = 1; v <= 4; v++) {
+      VoiceFX.preload(`chud://app/assets/grunts/scream${band}-${v}.wav`).catch(() => {});
+    }
+  }
 
   // Emotes: ? listening, ! answering, ... thinking, ~ agents working, blank idle.
   let agentsRunning = 0;

@@ -46,8 +46,9 @@ window and every Space.
   Each hit plays a wet crunch and a preset guttural scream, four takes per
   severity band, never the same one twice in a row (assets/grunts,
   regenerate with scripts/make-grunts.js), instant and offline, and
-  splats blood: behind him for a punch, sprayed and smeared
-  on the monitor edge for an impact, fading out after a few seconds. He
+  splats blood and a few bone shards: behind him for a punch, sprayed and
+  smeared on the monitor edge for an impact, fading out after a few
+  seconds. He
   heals one stage every `healSeconds` (default 2). Alt + right click for
   the menu.
 - The session closes itself after `idleSeconds` with no voice (default 10).
