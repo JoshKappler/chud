@@ -164,38 +164,46 @@
   }
   window.chud.onBounceHurt(() => ouch());
 
-  // Manual drag keeps click events usable: click toggles the session.
+  // Only a clean left tap toggles the session: not a drag, not a fling
+  // catch, not anything that just punched him. Grabbing pauses the drift.
   let down = null;
   let dragged = false;
+  let lastPunch = 0;
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
-    down = { x: e.screenX, y: e.screenY, t: Date.now() };
+    const d = { x: e.screenX, y: e.screenY, t: Date.now(), wasFlinging: false };
+    down = d;
     dragged = false;
+    window.chud.grab().then((r) => {
+      if (down === d) down.wasFlinging = r.wasFlinging;
+    });
   });
   window.addEventListener('mousemove', (e) => {
     if (!down) return;
     const dx = e.screenX - down.x;
     const dy = e.screenY - down.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3 && !dragged) {
-      dragged = true;
-      window.chud.dragState(true);
-    }
+    if (Math.abs(dx) + Math.abs(dy) > 3) dragged = true;
     if (dragged) {
       window.chud.moveBy(dx, dy);
-      down = { x: e.screenX, y: e.screenY };
+      down.x = e.screenX;
+      down.y = e.screenY;
     }
   });
   window.addEventListener('mouseup', () => {
-    if (down && !dragged && Date.now() - down.t < 400) {
+    if (!down) return;
+    const cleanTap = !dragged && Date.now() - down.t < 400
+      && !down.wasFlinging && Date.now() - lastPunch > 500;
+    window.chud.dragState(false);
+    down = null;
+    if (cleanTap) {
       if (RT.isConnected()) RT.disconnect('click');
       else startSession();
     }
-    if (dragged) window.chud.dragState(false);
-    down = null;
   });
   // Right click punches him. Hold alt while right clicking for the menu.
   canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+    lastPunch = Date.now();
     if (e.altKey) window.chud.menu({ muted: Wake.isMuted(), connected: RT.isConnected() });
     else ouch();
   });

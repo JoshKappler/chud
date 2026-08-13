@@ -30,8 +30,8 @@ const WakeLocal = (() => {
 
   async function init(cfg, cb) {
     onWake = cb;
-    aliases = cfg.wakeAliases.map((w) => w.toLowerCase());
-    prefixes = cfg.wakePrefixes.map((w) => w.toLowerCase());
+    aliases = cfg.localWakeAliases.map((w) => w.toLowerCase());
+    prefixes = cfg.localWakePrefixes.map((w) => w.toLowerCase());
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true },
     });

@@ -102,6 +102,11 @@ ipcMain.on('wake-start', () => {
 });
 ipcMain.on('wake-audio', (e, buf) => wakewatch.append(buf));
 ipcMain.on('drag-state', (e, v) => drift.setDragging(!!v));
+ipcMain.handle('win-grab', () => {
+  const wasFlinging = drift.getMode() === 'fling';
+  drift.setDragging(true);
+  return { wasFlinging };
+});
 app.on('before-quit', () => {
   wakewatch.stop();
   drift.stop();

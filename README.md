@@ -31,8 +31,11 @@ window and every Space.
 
 ## Using him
 
-- Say "hey chud", or tap him, to start a session. Say "thanks, chud" (he
-  hangs up after a goodbye grunt) or tap again to hang up.
+- Say "hey chud" or just "chud", or left-tap him, to start a session. Say
+  "thanks, chud" (he hangs up after a goodbye grunt) or tap again to hang
+  up. Punches, drags and fling catches never start one. The local Vosk
+  engine keeps its own homophone lists (`localWakeAliases`) since it
+  cannot spell chud.
 - Drag him anywhere; he drifts around the screen edges like flotsam.
   Fling him and he ricochets off the screen edges until the water drag
   slows him back into his drift.
