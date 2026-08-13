@@ -43,7 +43,7 @@ window and every Space.
   monitor edge hurt too. Twenty damage stages: bruises, cuts and blood
   through stage 9, then the skin falls away patch by patch from stage 10,
   revealing more skull with every hit until only his skull is left at 20.
-  Each hit plays a wet crunch and a preset pained exclamation
+  Each hit plays a wet crunch and a preset guttural scream (four per severity band, never the same one twice in a row)
   (assets/grunts, regenerate with scripts/make-grunts.js), instant and
   offline, and splats blood: behind him for a punch, sprayed and smeared
   on the monitor edge for an impact, fading out after a few seconds. He
