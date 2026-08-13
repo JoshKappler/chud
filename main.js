@@ -114,6 +114,7 @@ app.on('before-quit', () => {
 
 ipcMain.on('win-move-by', (e, { dx, dy }) => {
   if (!win) return;
+  drift.noteMove(dx, dy);
   const [x, y] = win.getPosition();
   win.setPosition(Math.round(x + dx), Math.round(y + dy));
 });

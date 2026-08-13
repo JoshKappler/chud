@@ -34,6 +34,8 @@ window and every Space.
 - Say "hey chud", or tap him, to start a session. Say "thanks, chud" (he
   hangs up after a goodbye grunt) or tap again to hang up.
 - Drag him anywhere; he drifts around the screen edges like flotsam.
+  Fling him and he ricochets off the screen edges until the water drag
+  slows him back into his drift.
 - Right click to punch him: progressive black eyes and bruises, and an
   increasingly despairing voice line each hit. He heals one stage every
   three minutes. Alt + right click for the menu (mute / end session / quit).
