@@ -9,14 +9,25 @@ apps and URLs, and reports back when agents finish.
 
 ```sh
 npm install
-npm run get-model        # 40MB Vosk model for local wake phrase detection
 echo 'OPENAI_API_KEY=sk-...' > .env
 npm start
 ```
 
 First launch asks for microphone access. The goblin floats above every
-window and every Space. Wake phrase detection runs fully local; audio only
-goes to OpenAI after "hey chud" opens a session.
+window and every Space.
+
+## Wake engines
+
+`wakeEngine` in `config.json` picks how "hey chud" is detected:
+
+- `"openai"` (default): an always-on Realtime transcription session with
+  `keywords` biased toward "chud". Accurate on the custom word and cheap
+  per hour, but it streams everything the mic hears to OpenAI, and open
+  sessions roll over every 55 minutes.
+- `"local"`: Vosk running on the machine; nothing leaves the box until the
+  wake phrase opens a session. Needs `npm run get-model` once (40MB).
+  "chud" is out of vocabulary, so it matches "hey" plus near-homophones
+  (`wakeAliases`); tune that list if he ignores you or wakes too easily.
 
 ## Using him
 
@@ -45,10 +56,8 @@ deep = fable. Agents run in `workspaceDir` (default `~`) and are killed after
 
 ## Notes
 
-- `config.json` holds the model, voice, persona, wake word aliases and agent
-  settings. "chud" is not in the recognizer vocabulary, so the wake check
-  matches a prefix ("hey") plus near-homophones; tune `wakeAliases` if he
-  ignores you or wakes too easily.
+- `config.json` holds the model, voice, persona, wake engine and agent
+  settings.
 - `claudeArgs` defaults to `--dangerously-skip-permissions`, matching the
   local shell alias. Remove it there if you want agents to run restricted.
 - The OpenAI key stays in the main process; the renderer only ever sees

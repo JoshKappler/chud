@@ -10,7 +10,8 @@
     "shot": "CHUD_SCREENSHOT=/tmp/chud-shot.png electron ."
   },
   "dependencies": {
-    "vosk-browser": "^0.0.8"
+    "vosk-browser": "^0.0.8",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "electron": "^37.0.0"

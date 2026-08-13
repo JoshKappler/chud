@@ -1,7 +1,7 @@
 // Local wake phrase detection with Vosk (WASM). Nothing leaves the machine
 // until "hey chud" is heard. "chud" is not in the model vocabulary, so we
 // match a prefix word followed by a configurable list of near-homophones.
-const Wake = (() => {
+const WakeLocal = (() => {
   let stream = null;
   let recognizer = null;
   let audioCtx = null;

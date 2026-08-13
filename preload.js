@@ -8,4 +8,7 @@ contextBridge.exposeInMainWorld('chud', {
   menu: (state) => ipcRenderer.send('goblin-menu', state),
   onAgentDone: (cb) => ipcRenderer.on('agent-done', (e, d) => cb(d)),
   onMenuCmd: (cb) => ipcRenderer.on('menu-cmd', (e, d) => cb(d)),
+  wakeStart: () => ipcRenderer.send('wake-start'),
+  wakeAudio: (buf) => ipcRenderer.send('wake-audio', buf),
+  onWakeDetected: (cb) => ipcRenderer.on('wake-detected', () => cb()),
 });

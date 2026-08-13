@@ -4,6 +4,7 @@ const fs = require('fs');
 const { pathToFileURL } = require('url');
 const session = require('./lib/session');
 const tools = require('./lib/tools');
+const wakewatch = require('./lib/wakewatch');
 
 const ROOT = __dirname;
 const SCREENSHOT = process.env.CHUD_SCREENSHOT || '';
@@ -83,6 +84,16 @@ app.on('window-all-closed', () => app.quit());
 ipcMain.handle('mint-session', () => session.mint(config, tools.schemas()));
 ipcMain.handle('tool-call', (e, { name, args }) => tools.execute(name, args || {}, config));
 ipcMain.handle('get-config', () => ({ ...config, screenshotMode: !!SCREENSHOT }));
+
+ipcMain.on('wake-start', () => {
+  if (config.wakeEngine !== 'local') {
+    wakewatch.start(config, () => {
+      if (win && !win.isDestroyed()) win.webContents.send('wake-detected');
+    });
+  }
+});
+ipcMain.on('wake-audio', (e, buf) => wakewatch.append(buf));
+app.on('before-quit', () => wakewatch.stop());
 
 ipcMain.on('win-move-by', (e, { dx, dy }) => {
   if (!win) return;

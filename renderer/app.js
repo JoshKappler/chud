@@ -3,6 +3,8 @@
   const canvas = document.getElementById('goblin');
   const cfg = await window.chud.getConfig();
   const pendingResults = [];
+  const Wake = cfg.wakeEngine === 'local' ? WakeLocal : WakeOpenAI;
+  window.Wake = Wake;
 
   Goblin.start();
 
