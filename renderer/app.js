@@ -154,35 +154,15 @@
     if (cmd === 'disconnect') RT.disconnect('menu');
   });
 
-  // 8-bit crunch: a decaying noise burst through a falling lowpass plus a
-  // dropping square thump.
+  // Wet lettuce-head crunch from lib/crunchcore, randomized per hit.
   function crunch() {
-    const t = beepCtx.currentTime;
-    const len = Math.floor(beepCtx.sampleRate * 0.12);
-    const buf = beepCtx.createBuffer(1, len, beepCtx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.6);
-    const noise = beepCtx.createBufferSource();
-    noise.buffer = buf;
-    const lp = beepCtx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(2200, t);
-    lp.frequency.exponentialRampToValueAtTime(300, t + 0.11);
-    const g = beepCtx.createGain();
-    g.gain.setValueAtTime(0.5, t);
-    g.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
-    noise.connect(lp).connect(g).connect(beepCtx.destination);
-    noise.start(t);
-    const osc = beepCtx.createOscillator();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(110, t);
-    osc.frequency.exponentialRampToValueAtTime(45, t + 0.09);
-    const og = beepCtx.createGain();
-    og.gain.setValueAtTime(0.25, t);
-    og.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
-    osc.connect(og).connect(beepCtx.destination);
-    osc.start(t);
-    osc.stop(t + 0.1);
+    const samples = CrunchCore.renderCrunch(beepCtx.sampleRate);
+    const buf = beepCtx.createBuffer(1, samples.length, beepCtx.sampleRate);
+    buf.copyToChannel(samples, 0);
+    const src = beepCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(beepCtx.destination);
+    src.start();
   }
 
   // Each hit plays the crunch plus the preset grunt for the new damage
