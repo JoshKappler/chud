@@ -67,16 +67,61 @@
     drips.push({ x: dx, y: dy, len: 4 + rng() * 9 });
   }
 
+  // flying droplets: sprayed away from the wall, pulled down by gravity,
+  // frozen into stains where they land
+  const drops = [];
+  const nDrops = 10 + Math.floor(rng() * 9);
+  for (let i = 0; i < nDrops; i++) {
+    let ang;
+    if (edge === 'left') ang = (rng() - 0.5) * 1.8;
+    else if (edge === 'right') ang = Math.PI + (rng() - 0.5) * 1.8;
+    else if (edge === 'top') ang = Math.PI / 2 + (rng() - 0.5) * 1.8;
+    else if (edge === 'bottom') ang = -Math.PI / 2 + (rng() - 0.5) * 1.8;
+    else ang = rng() * Math.PI * 2;
+    const sp = 25 + rng() * 120;
+    drops.push({
+      x: cx, y: cy,
+      vx: Math.cos(ang) * sp,
+      vy: Math.sin(ang) * sp,
+      life: 0.25 + rng() * 0.5,
+      c: COLORS[Math.floor(rng() * 2)],
+      dead: false,
+    });
+  }
+
   const born = performance.now();
+  let lastT = born;
   function draw(now) {
     const age = (now - born) / 1000;
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
     const grow = Math.min(1, age / 1.2);
     const alpha = age < 2 ? 1 : Math.max(0, 1 - Math.floor((age - 2) * 3) * 0.2);
+
+    for (const p of drops) {
+      if (p.dead) continue;
+      p.vy += 150 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.dead = true;
+        const gx = Math.round(p.x);
+        const gy = Math.round(p.y);
+        if (gx >= 0 && gx < L && gy >= 0 && gy < L) dots.push([gx, gy, p.c]);
+      }
+    }
+
     ctx.clearRect(0, 0, size, size);
     ctx.globalAlpha = alpha;
     for (const [x, y, c] of dots) {
       ctx.fillStyle = c;
       ctx.fillRect(x * S, y * S, S, S);
+    }
+    for (const p of drops) {
+      if (p.dead) continue;
+      ctx.fillStyle = p.c;
+      ctx.fillRect(Math.round(p.x) * S, Math.round(p.y) * S, S, S);
     }
     for (const d of drips) {
       const n = Math.floor(d.len * grow);

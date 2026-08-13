@@ -116,12 +116,7 @@ app.on('before-quit', () => {
   drift.stop();
 });
 
-ipcMain.on('win-move-by', (e, { dx, dy }) => {
-  if (!win) return;
-  drift.noteMove(dx, dy);
-  const [x, y] = win.getPosition();
-  win.setPosition(Math.round(x + dx), Math.round(y + dy));
-});
+ipcMain.on('win-move-by', (e, { dx, dy }) => drift.dragMove(dx, dy));
 
 ipcMain.on('splat-here', () => {
   if (!win || win.isDestroyed()) return;
