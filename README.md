@@ -31,14 +31,20 @@ window and every Space.
 
 ## Using him
 
-- Say "hey chud", or click him, to start a session. Click again to hang up.
-- Drag him anywhere. Right click for mute / end session / quit.
+- Say "hey chud", or tap him, to start a session. Say "thanks, chud" (he
+  hangs up after a goodbye grunt) or tap again to hang up.
+- Drag him anywhere; he drifts around the screen edges like flotsam.
+- Right click to punch him: progressive black eyes and bruises, and an
+  increasingly despairing voice line each hit. He heals one stage every
+  three minutes. Alt + right click for the menu (mute / end session / quit).
 - The session closes itself after `idleSeconds` of silence (default 90).
 - The badge counts agent results that arrived while disconnected; he reports
   them next time you talk.
 
-Faces: sleepy idle, ears-up listening, eyes-up thinking with dots, mouth
-synced to his voice while talking, grumpy when something fails.
+The thought bubble at his ear shows what he is doing: `?` listening, `!`
+answering, `...` thinking, `~` agents working in the background, nothing
+when idle. Faces: sleepy idle, ears-up listening, mouth synced to his voice
+while talking, grumpy when something fails or he is beaten up.
 
 ## What he can do
 

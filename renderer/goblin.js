@@ -15,7 +15,7 @@ const Goblin = (() => {
   const PAL = {
     o: '#131a0c', g: '#57a63f', d: '#37702a', l: '#8fd457',
     e: '#ffd83d', p: '#1b140d', w: '#f5efd7', m: '#33121a',
-    t: '#b33a3a', n: '#274d1e',
+    t: '#b33a3a', n: '#274d1e', b: '#5b3b6e', B: '#2e1d3f',
   };
 
   const BASE = [
@@ -68,11 +68,15 @@ const Goblin = (() => {
   let nextTwitch = performance.now() + 4000;
   let look = 1;
   let nextLook = performance.now() + 2500;
-  let dotPhase = 0;
+  let emote = null;
+  let damage = 0;
+  let lastHeal = performance.now();
+  let shakeUntil = 0;
+  let offX = 0;
 
   function px(x, y, c) {
     ctx.fillStyle = PAL[c];
-    ctx.fillRect(x * S, y * S, S, S);
+    ctx.fillRect((x + offX) * S, y * S, S, S);
   }
 
   function drawMap(rows, ox, oy) {
@@ -85,20 +89,58 @@ const Goblin = (() => {
   }
 
   function drawEye(anchor, dy, now) {
+    const isLeft = anchor === EYE_L;
     const wide = state === 'listening';
     const blinking = now < blinkUntil;
     const top = anchor.y + dy - (wide ? 1 : 0);
     const h = wide ? 4 : 3;
-    if (blinking) {
+
+    if (damage >= 5) {
+      drawMap(['o..o', '.oo.', 'o..o'], anchor.x, anchor.y + dy);
+    } else if (damage >= 2 && !isLeft) {
+      for (let x = 0; x < 4; x++) px(anchor.x + x, anchor.y + dy, 'd');
+      for (let x = 0; x < 4; x++) px(anchor.x + x, anchor.y + dy + 1, 'e');
+      px(anchor.x + 1, anchor.y + dy + 1, 'p');
+      px(anchor.x + 2, anchor.y + dy + 1, 'p');
+      for (let x = 0; x < 4; x++) px(anchor.x + x, anchor.y + dy + 2, 'd');
+    } else if (blinking) {
       for (let x = 0; x < 4; x++) px(anchor.x + x, anchor.y + dy + 1, 'o');
-      return;
+    } else {
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < 4; x++) px(anchor.x + x, top + y, 'e');
+      let pdx = look === 0 ? 0 : look === 2 ? 2 : 1;
+      let pdy = state === 'thinking' ? 0 : Math.floor(h / 2);
+      px(anchor.x + pdx, top + pdy, 'p');
+      px(anchor.x + pdx + 1, top + pdy, 'p');
     }
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < 4; x++) px(anchor.x + x, top + y, 'e');
-    let pdx = look === 0 ? 0 : look === 2 ? 2 : 1;
-    let pdy = state === 'thinking' ? 0 : Math.floor(h / 2);
-    px(anchor.x + pdx, top + pdy, 'p');
-    px(anchor.x + pdx + 1, top + pdy, 'p');
+
+    if (damage >= 1 && isLeft) {
+      const uy = anchor.y + dy + 3;
+      for (let x = 0; x < 4; x++) px(anchor.x + x, uy, 'B');
+      px(anchor.x - 1, uy - 1, 'b');
+      px(anchor.x + 4, uy - 1, 'b');
+    }
+    if (damage >= 2 && !isLeft) {
+      const uy = anchor.y + dy + 3;
+      for (let x = 0; x < 4; x++) px(anchor.x + x, uy, 'b');
+    }
+  }
+
+  const BLOTCHES = {
+    3: [[10, 4, 'b'], [11, 4, 'B'], [17, 14, 'b']],
+    4: [[8, 10, 'B'], [9, 10, 'b'], [16, 3, 'b'], [19, 7, 'B']],
+    5: [[12, 19, 'b'], [13, 19, 'B'], [18, 17, 'b']],
+  };
+
+  function drawBruises(dy) {
+    for (const lvl of [3, 4, 5]) {
+      if (damage < lvl) continue;
+      for (const [x, y, c] of BLOTCHES[lvl]) px(x, y + dy, c);
+    }
+    if (damage >= 4) {
+      ctx.clearRect((1 + offX) * S, (5 + dy) * S, S, S);
+      ctx.clearRect((2 + offX) * S, (6 + dy) * S, S, S);
+    }
   }
 
   function drawBrows(dy) {
@@ -130,13 +172,28 @@ const Goblin = (() => {
     return 0;
   }
 
-  function drawDots(now) {
-    if (state !== 'thinking') return;
-    dotPhase = Math.floor(now / 350) % 4;
-    const dots = [[21, 6], [23, 4], [25, 2]];
-    for (let i = 0; i < dotPhase && i < 3; i++) {
-      px(dots[i][0], dots[i][1], 'w');
-      px(dots[i][0] + 1, dots[i][1], 'w');
+  const GLYPHS = {
+    '?': ['ooo', '..o', '.oo', '...', '.o.'],
+    '!': ['.o.', '.o.', '.o.', '...', '.o.'],
+  };
+
+  function drawEmote(now) {
+    if (!emote) return;
+    for (let y = 1; y <= 7; y++) {
+      for (let x = 21; x <= 27; x++) {
+        const edge = y === 1 || y === 7 || x === 21 || x === 27;
+        px(x, y, edge ? 'o' : 'w');
+      }
+    }
+    px(20, 8, 'w');
+    if (emote === 'dots') {
+      const phase = Math.floor(now / 350) % 4;
+      const xs = [22, 24, 26];
+      for (let i = 0; i < phase && i < 3; i++) px(xs[i], 4, 'o');
+    } else if (emote === '~') {
+      drawMap(['.oo.o', 'o..o.'], 22, 3);
+    } else if (GLYPHS[emote]) {
+      drawMap(GLYPHS[emote], 23, 2);
     }
   }
 
@@ -162,6 +219,8 @@ const Goblin = (() => {
     if (now > nextBlink) { blinkUntil = now + 140; nextBlink = now + 2200 + Math.random() * 3800; }
     if (now > nextTwitch) { twitchUntil = now + 160; nextTwitch = now + 3500 + Math.random() * 5000; }
     if (now > nextLook) { look = Math.floor(Math.random() * 3); nextLook = now + 1500 + Math.random() * 3000; }
+    if (damage > 0 && now - lastHeal > 180000) { damage--; lastHeal = now; }
+    offX = now < shakeUntil ? (Math.random() < 0.5 ? -1 : 1) : 0;
 
     shownLevel = Math.max(level, shownLevel * 0.75);
 
@@ -186,8 +245,10 @@ const Goblin = (() => {
     drawBrows(dy);
     drawNose(dy);
     const m = MOUTHS[mouthFrame()];
-    drawMap(m.rows, MOUTH_X, m.y + dy);
-    drawDots(now);
+    const rows = damage >= 3 ? m.rows.map((r) => (r[0] === 'w' ? '.' + r.slice(1) : r)) : m.rows;
+    drawMap(rows, MOUTH_X, m.y + dy);
+    drawBruises(dy);
+    drawEmote(now);
     drawBadge();
 
     requestAnimationFrame(render);
@@ -200,5 +261,13 @@ const Goblin = (() => {
     getState: () => state,
     setLevel: (v) => { level = v; },
     setBadge: (n) => { badge = n; },
+    setEmote: (s) => { emote = s; },
+    getDamage: () => damage,
+    setDamage: (n) => {
+      const grew = n > damage;
+      damage = Math.max(0, Math.min(5, n));
+      lastHeal = performance.now();
+      if (grew) shakeUntil = performance.now() + 350;
+    },
   };
 })();

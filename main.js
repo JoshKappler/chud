@@ -6,6 +6,7 @@ const session = require('./lib/session');
 const tools = require('./lib/tools');
 const wakewatch = require('./lib/wakewatch');
 const drift = require('./lib/drift');
+const oneshot = require('./lib/oneshot');
 
 const ROOT = __dirname;
 const SCREENSHOT = process.env.CHUD_SCREENSHOT || '';
@@ -48,7 +49,9 @@ function createWindow() {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   const pose = process.env.CHUD_POSE || '';
   const badge = process.env.CHUD_BADGE || '';
-  const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}` : '';
+  const emote = encodeURIComponent(process.env.CHUD_EMOTE || '');
+  const damage = process.env.CHUD_DAMAGE || '';
+  const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}` : '';
   win.loadURL(`chud://app/renderer/index.html${qs}`);
   if (!SCREENSHOT) drift.start(win);
 
@@ -87,6 +90,13 @@ app.on('window-all-closed', () => app.quit());
 ipcMain.handle('mint-session', () => session.mint(config, tools.schemas()));
 ipcMain.handle('tool-call', (e, { name, args }) => tools.execute(name, args || {}, config));
 ipcMain.handle('get-config', () => ({ ...config, screenshotMode: !!SCREENSHOT }));
+ipcMain.handle('oneshot-say', (e, text) =>
+  oneshot.speak(String(text), config, {
+    onChunk: (b64) => {
+      if (win && !win.isDestroyed()) win.webContents.send('tts-pcm', b64);
+    },
+  })
+);
 
 ipcMain.on('wake-start', () => {
   if (config.wakeEngine !== 'local') {

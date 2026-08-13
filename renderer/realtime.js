@@ -14,6 +14,8 @@ const RT = (() => {
   let levelBuf = null;
   let outCtx = null;
   let outbox = [];
+  let armClose = false;
+  let goodbyeActive = false;
 
   function send(msg) {
     if (dc && dc.readyState === 'open') dc.send(JSON.stringify(msg));
@@ -50,6 +52,16 @@ const RT = (() => {
   }
 
   async function doTool(item) {
+    if (item.name === 'end_session') {
+      send({
+        type: 'conversation.item.create',
+        item: { type: 'function_call_output', call_id: item.call_id, output: '{"ok":true}' },
+      });
+      send({ type: 'response.create' });
+      armClose = true;
+      setTimeout(() => { if (connected) disconnect('bye'); }, 10000);
+      return;
+    }
     if (hooks.onToolStart) hooks.onToolStart(item.name);
     let result;
     try {
@@ -73,10 +85,15 @@ const RT = (() => {
         touch();
         break;
       case 'response.created':
+        if (armClose) goodbyeActive = true;
         if (hooks.onThinking) hooks.onThinking();
         touch();
         break;
       case 'response.done':
+        if (goodbyeActive) {
+          setTimeout(() => disconnect('bye'), 1500);
+          break;
+        }
         if (hooks.onResponseDone) hooks.onResponseDone();
         touch();
         break;
@@ -140,6 +157,8 @@ const RT = (() => {
     if (pc) { try { pc.close(); } catch (e) {} pc = null; }
     if (outCtx) { try { outCtx.close(); } catch (e) {} outCtx = null; }
     outbox = [];
+    armClose = false;
+    goodbyeActive = false;
     const was = connected;
     connected = false;
     if (was && hooks.onDisconnect) hooks.onDisconnect(reason);
