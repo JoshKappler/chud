@@ -1,0 +1,18 @@
+{
+  "name": "chud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chud, an 8-bit goblin voice assistant that lives on the desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "get-model": "bash scripts/get-model.sh",
+    "shot": "CHUD_SCREENSHOT=/tmp/chud-shot.png electron ."
+  },
+  "dependencies": {
+    "vosk-browser": "^0.0.8"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0"
+  }
+}

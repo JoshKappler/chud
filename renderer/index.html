@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>chud</title>
+  <style>
+    html, body { margin: 0; background: transparent; overflow: hidden; -webkit-user-select: none; }
+    canvas { image-rendering: pixelated; display: block; cursor: grab; }
+    canvas:active { cursor: grabbing; }
+  </style>
+</head>
+<body>
+  <canvas id="goblin" width="196" height="196"></canvas>
+  <audio id="voice" autoplay></audio>
+  <script src="../node_modules/vosk-browser/dist/vosk.js"></script>
+  <script src="goblin.js"></script>
+  <script src="wake.js"></script>
+  <script src="realtime.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
