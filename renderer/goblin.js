@@ -16,6 +16,7 @@ const Goblin = (() => {
     o: '#131a0c', g: '#57a63f', d: '#37702a', l: '#8fd457',
     e: '#ffd83d', p: '#1b140d', w: '#f5efd7', m: '#33121a',
     t: '#b33a3a', n: '#274d1e', b: '#5b3b6e', B: '#2e1d3f',
+    r: '#a11f2f', R: '#6e1420',
   };
 
   const BASE = [
@@ -48,26 +49,22 @@ const Goblin = (() => {
 
   const PALE = { g: '#75836a', d: '#525f49', l: '#98a58c' };
 
-  const SKULL_TOP = [
-    '..........oooooooo..........',
-    '.........owwwwwwwwo.........',
-    '........owwwwwowwwwo........',
-    '.......owwwwwwowwwwwo.......',
-    '......owwwwwwwwwwwwwwo......',
-    '......owwwwwwwwwwwwwwo......',
-    '......owwppppwwppppwwo......',
-    '......owwpeppwwppepwwo......',
-    '......owwppppwwppppwwo......',
-    '......owwwwwwwwwwwwwwo......',
-    '.......owwwwwppwwwwwo.......',
-    '.......owwwwppppwwwwo.......',
-    '........owwwwwwwwwwo........',
-  ];
-  const SKULL_JAW = [
-    '........owwowwowwowo........',
-    '.........owwowwowwo.........',
-    '..........oooooooo..........',
-  ];
+  const BLOOD = {
+    3: [[12, 15, 'r']],
+    4: [[9, 8, 'R'], [10, 8, 'r'], [10, 9, 'r']],
+    5: [[16, 18, 'r'], [16, 19, 'R']],
+    6: [[7, 11, 'r'], [20, 10, 'R'], [11, 3, 'r'], [19, 15, 'r']],
+    7: [[8, 13, 'R'], [8, 14, 'r'], [15, 4, 'r'], [15, 5, 'R'], [12, 2, 'r']],
+    8: [[10, 11, 'r'], [10, 12, 'R'], [18, 12, 'r'], [18, 13, 'R'], [14, 19, 'r']],
+    9: [[11, 2, 'R'], [11, 3, 'r'], [16, 2, 'r'], [16, 3, 'R'], [13, 3, 'r'], [9, 5, 'r'], [18, 6, 'R'], [14, 7, 'r'], [13, 20, 'R']],
+  };
+
+  function drawBlood(dy) {
+    for (const lvl of [3, 4, 5, 6, 7, 8, 9]) {
+      if (damage < lvl) continue;
+      for (const [x, y, c] of BLOOD[lvl]) px(x, y + dy, c);
+    }
+  }
 
   const MOUTHS = {
     0: { y: 15, rows: ['w......w', '.oooooo.'] },
@@ -99,7 +96,7 @@ const Goblin = (() => {
   let healMs = 180000;
 
   function px(x, y, c) {
-    ctx.fillStyle = damage >= 7 && PALE[c] ? PALE[c] : PAL[c];
+    ctx.fillStyle = damage >= 8 && PALE[c] ? PALE[c] : PAL[c];
     ctx.fillRect((x + offX) * S, y * S, S, S);
   }
 
@@ -258,11 +255,40 @@ const Goblin = (() => {
     const bob = Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
     const earsUp = state === 'listening' || now < twitchUntil;
 
-    if (damage >= 8) {
+    if (damage >= 10) {
       const dy = OY + bob;
       const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
-      drawMap(SKULL_TOP, 0, 2 + dy);
-      drawMap(SKULL_JAW, 0, 15 + dy + jaw);
+      for (let y = 0; y < BASE.length; y++) {
+        for (let x = 0; x < BASE[y].length; x++) {
+          const c = BASE[y][x];
+          if (c === '.') continue;
+          px(x, y + dy + (y >= 15 ? jaw : 0), c === 'o' ? 'o' : 'w');
+        }
+      }
+      for (let yy = 0; yy < 4; yy++) {
+        for (let xx = 0; xx < 4; xx++) {
+          px(9 + xx, 9 + yy + dy, 'p');
+          px(15 + xx, 9 + yy + dy, 'p');
+        }
+      }
+      px(10, 10 + dy, 'e');
+      px(17, 10 + dy, 'e');
+      px(13, 13 + dy, 'p');
+      px(14, 13 + dy, 'p');
+      px(13, 14 + dy, 'p');
+      px(14, 14 + dy, 'p');
+      for (let xx = 10; xx <= 17; xx++) {
+        px(xx, 15 + dy + jaw, 'w');
+        px(xx, 16 + dy + jaw, xx % 2 ? 'o' : 'w');
+      }
+      px(12, 3 + dy, 'o');
+      px(13, 4 + dy, 'o');
+      px(16, 6 + dy, 'o');
+      px(9, 13 + dy, 'r');
+      px(9, 14 + dy, 'R');
+      px(18, 13 + dy, 'r');
+      px(11, 2 + dy, 'r');
+      px(17, 3 + dy, 'R');
       drawEmote(now);
       drawBadge();
       requestAnimationFrame(render);
@@ -290,6 +316,7 @@ const Goblin = (() => {
     if (damage >= 6) rows = rows.map((r) => (r[r.length - 1] === 'w' ? r.slice(0, -1) + '.' : r));
     drawMap(rows, MOUTH_X, m.y + dy);
     drawBruises(dy);
+    drawBlood(dy);
     drawEmote(now);
     drawBadge();
 
@@ -308,7 +335,7 @@ const Goblin = (() => {
     getDamage: () => damage,
     setDamage: (n) => {
       const grew = n > damage;
-      damage = Math.max(0, Math.min(8, n));
+      damage = Math.max(0, Math.min(10, n));
       lastHeal = performance.now();
       if (grew) shakeUntil = performance.now() + 350;
     },

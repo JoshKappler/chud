@@ -36,13 +36,14 @@ window and every Space.
 - Drag him anywhere; he drifts around the screen edges like flotsam.
   Fling him and he ricochets off the screen edges until the water drag
   slows him back into his drift.
-- Right click to punch him. Hard wall bounces from a fling hurt too. Eight
-  damage stages: black eye, swollen eye, bruises and a lost tusk, a notched
-  ear, X eyes, mangled, deathly pale, and finally a bare skull. Each hit
+- Right click to punch him. Hard wall bounces from a fling hurt too. Ten
+  damage stages: black eye, swollen eye, a nosebleed and lost tusk, a cut
+  brow and notched ear, X eyes and a bleeding chin, mangled with splatter,
+  bloodier, deathly pale, drenched, and finally his own skull. Each hit
   plays a preset pained exclamation (assets/grunts, regenerate with
   scripts/make-grunts.js), instant and offline. He heals one stage every
-  `healSeconds` (default 180). Alt + right click for the menu.
-- The session closes itself after `idleSeconds` of silence (default 90).
+  `healSeconds` (default 5). Alt + right click for the menu.
+- The session closes itself after `idleSeconds` with no voice (default 10).
 - The badge counts agent results that arrived while disconnected; he reports
   them next time you talk.
 

@@ -157,7 +157,7 @@
   // Each hit plays the preset grunt for the new damage stage, instant and
   // offline. Fists and hard wall bounces land the same way.
   function ouch() {
-    const d = Math.min(8, Goblin.getDamage() + 1);
+    const d = Math.min(10, Goblin.getDamage() + 1);
     Goblin.setDamage(d);
     beep([180, 120], 0.09);
     VoiceFX.playUrl(`chud://app/assets/grunts/hit${d}.wav`).catch(() => {});

@@ -22,6 +22,8 @@ const STAGES = [
   'a long miserable broken moan',
   'a faint rasping plea, almost gone',
   'a dusty hollow death rattle, resigned to it all',
+  'a wet gurgle, drowning in it',
+  'a dry bone click and a puff of dust, barely a sound at all',
 ];
 
 function wavHeader(dataLen, rate) {
@@ -46,9 +48,14 @@ function wavHeader(dataLen, rate) {
   fs.mkdirSync(path.join(ROOT, 'assets/grunts'), { recursive: true });
   for (let i = 0; i < STAGES.length; i++) {
     const n = i + 1;
+    const file = path.join(ROOT, `assets/grunts/hit${n}.wav`);
+    if (fs.existsSync(file)) {
+      console.log(`hit${n}.wav exists, skipping`);
+      continue;
+    }
     const chunks = [];
     const r = await oneshot.speak(
-      `You just took hit ${n} of 8. Make ONLY the exclamation itself: ${STAGES[i]}. At most six words, mostly noise, no full sentences.`,
+      `You just took hit ${n} of ${STAGES.length}. Make ONLY the exclamation itself: ${STAGES[i]}. At most six words, mostly noise, no full sentences.`,
       config,
       { onChunk: (b64) => chunks.push(Buffer.from(b64, 'base64')) }
     );
@@ -58,7 +65,6 @@ function wavHeader(dataLen, rate) {
       continue;
     }
     const pcm = Buffer.concat(chunks);
-    const file = path.join(ROOT, `assets/grunts/hit${n}.wav`);
     fs.writeFileSync(file, Buffer.concat([wavHeader(pcm.length, 24000), pcm]));
     console.log(`hit${n}.wav ${(pcm.length / 48000).toFixed(1)}s "${r.transcript}"`);
   }
