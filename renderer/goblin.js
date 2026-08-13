@@ -3,8 +3,14 @@
 const Goblin = (() => {
   const canvas = document.getElementById('goblin');
   const ctx = canvas.getContext('2d');
-  const S = 7;
+  let S = 4;
   const OY = 1;
+
+  function setScale(n) {
+    S = n;
+    canvas.width = 28 * S;
+    canvas.height = 28 * S;
+  }
 
   const PAL = {
     o: '#131a0c', g: '#57a63f', d: '#37702a', l: '#8fd457',
@@ -188,7 +194,8 @@ const Goblin = (() => {
   }
 
   return {
-    start: () => requestAnimationFrame(render),
+    setScale,
+    start: () => { setScale(S); requestAnimationFrame(render); },
     setState: (s) => { state = s; },
     getState: () => state,
     setLevel: (v) => { level = v; },

@@ -6,6 +6,7 @@
   const Wake = cfg.wakeEngine === 'local' ? WakeLocal : WakeOpenAI;
   window.Wake = Wake;
 
+  Goblin.setScale(cfg.spriteScale || 4);
   Goblin.start();
 
   if (cfg.screenshotMode) {
@@ -110,7 +111,10 @@
     if (!down) return;
     const dx = e.screenX - down.x;
     const dy = e.screenY - down.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) dragged = true;
+    if (Math.abs(dx) + Math.abs(dy) > 3 && !dragged) {
+      dragged = true;
+      window.chud.dragState(true);
+    }
     if (dragged) {
       window.chud.moveBy(dx, dy);
       down = { x: e.screenX, y: e.screenY };
@@ -121,6 +125,7 @@
       if (RT.isConnected()) RT.disconnect('click');
       else startSession();
     }
+    if (dragged) window.chud.dragState(false);
     down = null;
   });
   canvas.addEventListener('contextmenu', (e) => {

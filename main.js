@@ -5,6 +5,7 @@ const { pathToFileURL } = require('url');
 const session = require('./lib/session');
 const tools = require('./lib/tools');
 const wakewatch = require('./lib/wakewatch');
+const drift = require('./lib/drift');
 
 const ROOT = __dirname;
 const SCREENSHOT = process.env.CHUD_SCREENSHOT || '';
@@ -32,9 +33,10 @@ protocol.registerSchemesAsPrivileged([
 let win = null;
 
 function createWindow() {
+  const side = 28 * (config.spriteScale || 4);
   win = new BrowserWindow({
-    width: 196,
-    height: 196,
+    width: side,
+    height: side,
     transparent: true,
     frame: false,
     resizable: false,
@@ -48,6 +50,7 @@ function createWindow() {
   const badge = process.env.CHUD_BADGE || '';
   const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}` : '';
   win.loadURL(`chud://app/renderer/index.html${qs}`);
+  if (!SCREENSHOT) drift.start(win);
 
   if (SCREENSHOT) {
     win.webContents.once('did-finish-load', () => {
@@ -93,7 +96,11 @@ ipcMain.on('wake-start', () => {
   }
 });
 ipcMain.on('wake-audio', (e, buf) => wakewatch.append(buf));
-app.on('before-quit', () => wakewatch.stop());
+ipcMain.on('drag-state', (e, v) => drift.setDragging(!!v));
+app.on('before-quit', () => {
+  wakewatch.stop();
+  drift.stop();
+});
 
 ipcMain.on('win-move-by', (e, { dx, dy }) => {
   if (!win) return;
