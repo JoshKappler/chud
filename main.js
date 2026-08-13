@@ -6,7 +6,6 @@ const session = require('./lib/session');
 const tools = require('./lib/tools');
 const wakewatch = require('./lib/wakewatch');
 const drift = require('./lib/drift');
-const oneshot = require('./lib/oneshot');
 
 const ROOT = __dirname;
 const SCREENSHOT = process.env.CHUD_SCREENSHOT || '';
@@ -81,6 +80,9 @@ app.whenReady().then(async () => {
   tools.setNotify((payload) => {
     if (win && !win.isDestroyed()) win.webContents.send('agent-done', payload);
   });
+  drift.setOnBounce(() => {
+    if (win && !win.isDestroyed()) win.webContents.send('bounce-hurt');
+  });
 
   createWindow();
 });
@@ -90,13 +92,6 @@ app.on('window-all-closed', () => app.quit());
 ipcMain.handle('mint-session', () => session.mint(config, tools.schemas()));
 ipcMain.handle('tool-call', (e, { name, args }) => tools.execute(name, args || {}, config));
 ipcMain.handle('get-config', () => ({ ...config, screenshotMode: !!SCREENSHOT }));
-ipcMain.handle('oneshot-say', (e, text) =>
-  oneshot.speak(String(text), config, {
-    onChunk: (b64) => {
-      if (win && !win.isDestroyed()) win.webContents.send('tts-pcm', b64);
-    },
-  })
-);
 
 ipcMain.on('wake-start', () => {
   if (config.wakeEngine !== 'local') {

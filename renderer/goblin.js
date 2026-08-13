@@ -46,6 +46,29 @@ const Goblin = (() => {
 
   const WARTS = [[9, 6, 'd'], [18, 5, 'd'], [8, 12, 'd'], [19, 12, 'd'], [11, 4, 'l']];
 
+  const PALE = { g: '#75836a', d: '#525f49', l: '#98a58c' };
+
+  const SKULL_TOP = [
+    '..........oooooooo..........',
+    '.........owwwwwwwwo.........',
+    '........owwwwwowwwwo........',
+    '.......owwwwwwowwwwwo.......',
+    '......owwwwwwwwwwwwwwo......',
+    '......owwwwwwwwwwwwwwo......',
+    '......owwppppwwppppwwo......',
+    '......owwpeppwwppepwwo......',
+    '......owwppppwwppppwwo......',
+    '......owwwwwwwwwwwwwwo......',
+    '.......owwwwwppwwwwwo.......',
+    '.......owwwwppppwwwwo.......',
+    '........owwwwwwwwwwo........',
+  ];
+  const SKULL_JAW = [
+    '........owwowwowwowo........',
+    '.........owwowwowwo.........',
+    '..........oooooooo..........',
+  ];
+
   const MOUTHS = {
     0: { y: 15, rows: ['w......w', '.oooooo.'] },
     1: { y: 15, rows: ['w......w', '.ommmmo.', '..oooo..'] },
@@ -73,9 +96,10 @@ const Goblin = (() => {
   let lastHeal = performance.now();
   let shakeUntil = 0;
   let offX = 0;
+  let healMs = 180000;
 
   function px(x, y, c) {
-    ctx.fillStyle = PAL[c];
+    ctx.fillStyle = damage >= 7 && PALE[c] ? PALE[c] : PAL[c];
     ctx.fillRect((x + offX) * S, y * S, S, S);
   }
 
@@ -130,16 +154,22 @@ const Goblin = (() => {
     3: [[10, 4, 'b'], [11, 4, 'B'], [17, 14, 'b']],
     4: [[8, 10, 'B'], [9, 10, 'b'], [16, 3, 'b'], [19, 7, 'B']],
     5: [[12, 19, 'b'], [13, 19, 'B'], [18, 17, 'b']],
+    6: [[11, 7, 'B'], [12, 7, 'b'], [15, 8, 'B'], [10, 16, 'b'], [16, 16, 'B'], [13, 10, 'b']],
+    7: [[9, 8, 'B'], [18, 9, 'b'], [12, 14, 'B'], [14, 17, 'b'], [11, 12, 'B']],
   };
 
   function drawBruises(dy) {
-    for (const lvl of [3, 4, 5]) {
+    for (const lvl of [3, 4, 5, 6, 7]) {
       if (damage < lvl) continue;
       for (const [x, y, c] of BLOTCHES[lvl]) px(x, y + dy, c);
     }
     if (damage >= 4) {
       ctx.clearRect((1 + offX) * S, (5 + dy) * S, S, S);
       ctx.clearRect((2 + offX) * S, (6 + dy) * S, S, S);
+    }
+    if (damage >= 6) {
+      ctx.clearRect((26 + offX) * S, (5 + dy) * S, S, S);
+      ctx.clearRect((25 + offX) * S, (6 + dy) * S, S, S);
     }
   }
 
@@ -219,7 +249,7 @@ const Goblin = (() => {
     if (now > nextBlink) { blinkUntil = now + 140; nextBlink = now + 2200 + Math.random() * 3800; }
     if (now > nextTwitch) { twitchUntil = now + 160; nextTwitch = now + 3500 + Math.random() * 5000; }
     if (now > nextLook) { look = Math.floor(Math.random() * 3); nextLook = now + 1500 + Math.random() * 3000; }
-    if (damage > 0 && now - lastHeal > 180000) { damage--; lastHeal = now; }
+    if (damage > 0 && now - lastHeal > healMs) { damage--; lastHeal = now; }
     offX = now < shakeUntil ? (Math.random() < 0.5 ? -1 : 1) : 0;
 
     shownLevel = Math.max(level, shownLevel * 0.75);
@@ -227,6 +257,17 @@ const Goblin = (() => {
     const bobSpeed = state === 'talking' ? 260 : state === 'listening' ? 400 : 900;
     const bob = Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
     const earsUp = state === 'listening' || now < twitchUntil;
+
+    if (damage >= 8) {
+      const dy = OY + bob;
+      const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
+      drawMap(SKULL_TOP, 0, 2 + dy);
+      drawMap(SKULL_JAW, 0, 15 + dy + jaw);
+      drawEmote(now);
+      drawBadge();
+      requestAnimationFrame(render);
+      return;
+    }
 
     for (let y = 0; y < BASE.length; y++) {
       for (let x = 0; x < BASE[y].length; x++) {
@@ -245,7 +286,8 @@ const Goblin = (() => {
     drawBrows(dy);
     drawNose(dy);
     const m = MOUTHS[mouthFrame()];
-    const rows = damage >= 3 ? m.rows.map((r) => (r[0] === 'w' ? '.' + r.slice(1) : r)) : m.rows;
+    let rows = damage >= 3 ? m.rows.map((r) => (r[0] === 'w' ? '.' + r.slice(1) : r)) : m.rows;
+    if (damage >= 6) rows = rows.map((r) => (r[r.length - 1] === 'w' ? r.slice(0, -1) + '.' : r));
     drawMap(rows, MOUTH_X, m.y + dy);
     drawBruises(dy);
     drawEmote(now);
@@ -262,10 +304,11 @@ const Goblin = (() => {
     setLevel: (v) => { level = v; },
     setBadge: (n) => { badge = n; },
     setEmote: (s) => { emote = s; },
+    setHealSeconds: (s) => { healMs = Math.max(10, s) * 1000; },
     getDamage: () => damage,
     setDamage: (n) => {
       const grew = n > damage;
-      damage = Math.max(0, Math.min(5, n));
+      damage = Math.max(0, Math.min(8, n));
       lastHeal = performance.now();
       if (grew) shakeUntil = performance.now() + 350;
     },

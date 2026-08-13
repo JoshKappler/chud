@@ -7,6 +7,7 @@
   window.Wake = Wake;
 
   Goblin.setScale(cfg.spriteScale || 4);
+  Goblin.setHealSeconds(cfg.healSeconds || 180);
   Goblin.start();
 
   if (cfg.screenshotMode) {
@@ -37,11 +38,41 @@
     }
   }
 
+  VoiceFX.ensure(cfg);
+
   // Emotes: ? listening, ! answering, ... thinking, ~ agents working, blank idle.
   let agentsRunning = 0;
   function refreshIdleEmote() {
     if (!RT.isConnected()) Goblin.setEmote(agentsRunning > 0 ? '~' : null);
   }
+
+  // All of chud's audio flows through VoiceFX; one level loop owns the
+  // mouth and the talking state, whatever the source.
+  let quietSince = 0;
+  VoiceFX.onLevel((v) => {
+    Goblin.setLevel(v);
+    if (v > 0.03) {
+      quietSince = 0;
+      if (Goblin.getState() !== 'talking') {
+        Goblin.setState('talking');
+        if (RT.isConnected()) Goblin.setEmote('!');
+      }
+      if (RT.isConnected()) RT.poke();
+    } else if (Goblin.getState() === 'talking') {
+      const now = Date.now();
+      if (!quietSince) quietSince = now;
+      else if (now - quietSince > 350) {
+        quietSince = 0;
+        if (RT.isConnected()) {
+          Goblin.setState('listening');
+          Goblin.setEmote('?');
+        } else {
+          Goblin.setState(Goblin.getDamage() > 0 ? 'grumpy' : 'idle');
+          refreshIdleEmote();
+        }
+      }
+    }
+  });
 
   const hooks = {
     onConnect: () => {
@@ -61,13 +92,6 @@
       if (RT.isConnected()) {
         Goblin.setState('listening');
         Goblin.setEmote('?');
-      }
-    },
-    onLevel: (v) => {
-      Goblin.setLevel(v);
-      if (v > 0.03 && Goblin.getState() !== 'talking') {
-        Goblin.setState('talking');
-        Goblin.setEmote('!');
       }
     },
     onToolStart: () => {
@@ -130,58 +154,15 @@
     if (cmd === 'disconnect') RT.disconnect('menu');
   });
 
-  // Plays one-shot voice lines (PCM16 24kHz chunks from the main process)
-  // and drives the mouth while they play.
-  let ttsCtx = null;
-  let ttsTime = 0;
-  let ttsPlaying = 0;
-  window.chud.onTtsPcm((b64) => {
-    if (!ttsCtx) ttsCtx = new AudioContext({ sampleRate: 24000 });
-    const raw = atob(b64);
-    const n = Math.floor(raw.length / 2);
-    if (!n) return;
-    const f = new Float32Array(n);
-    let sum = 0;
-    for (let i = 0; i < n; i++) {
-      let v = raw.charCodeAt(2 * i) | (raw.charCodeAt(2 * i + 1) << 8);
-      if (v >= 0x8000) v -= 0x10000;
-      f[i] = v / 32768;
-      sum += f[i] * f[i];
-    }
-    const rms = Math.sqrt(sum / n);
-    const buf = ttsCtx.createBuffer(1, n, 24000);
-    buf.copyToChannel(f, 0);
-    const src = ttsCtx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ttsCtx.destination);
-    const start = Math.max(ttsTime, ttsCtx.currentTime + 0.05);
-    src.start(start);
-    ttsTime = start + buf.duration;
-    ttsPlaying++;
-    setTimeout(() => {
-      if (!RT.isConnected()) {
-        Goblin.setState('talking');
-        Goblin.setLevel(rms * 2);
-      }
-    }, Math.max(0, (start - ttsCtx.currentTime) * 1000));
-    src.onended = () => {
-      ttsPlaying--;
-      if (ttsPlaying <= 0 && !RT.isConnected()) {
-        Goblin.setLevel(0);
-        Goblin.setState(Goblin.getDamage() > 0 ? 'grumpy' : 'idle');
-        refreshIdleEmote();
-      }
-    };
-  });
-
-  function punch() {
-    const d = Math.min(5, Goblin.getDamage() + 1);
+  // Each hit plays the preset grunt for the new damage stage, instant and
+  // offline. Fists and hard wall bounces land the same way.
+  function ouch() {
+    const d = Math.min(8, Goblin.getDamage() + 1);
     Goblin.setDamage(d);
     beep([180, 120], 0.09);
-    const prompt = `Josh just punched you. That is hit ${d} of 5. React out loud with ONE short goblin voice line, more despairing, broken and pitiful than the last time. No retaliation, just escalating goblin misery.`;
-    if (RT.isConnected()) RT.say(prompt);
-    else window.chud.oneshot(prompt).catch(() => {});
+    VoiceFX.playUrl(`chud://app/assets/grunts/hit${d}.wav`).catch(() => {});
   }
+  window.chud.onBounceHurt(() => ouch());
 
   // Manual drag keeps click events usable: click toggles the session.
   let down = null;
@@ -216,7 +197,7 @@
   canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (e.altKey) window.chud.menu({ muted: Wake.isMuted(), connected: RT.isConnected() });
-    else punch();
+    else ouch();
   });
 
   try {

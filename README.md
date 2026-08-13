@@ -36,9 +36,12 @@ window and every Space.
 - Drag him anywhere; he drifts around the screen edges like flotsam.
   Fling him and he ricochets off the screen edges until the water drag
   slows him back into his drift.
-- Right click to punch him: progressive black eyes and bruises, and an
-  increasingly despairing voice line each hit. He heals one stage every
-  three minutes. Alt + right click for the menu (mute / end session / quit).
+- Right click to punch him. Hard wall bounces from a fling hurt too. Eight
+  damage stages: black eye, swollen eye, bruises and a lost tusk, a notched
+  ear, X eyes, mangled, deathly pale, and finally a bare skull. Each hit
+  plays a preset pained exclamation (assets/grunts, regenerate with
+  scripts/make-grunts.js), instant and offline. He heals one stage every
+  `healSeconds` (default 180). Alt + right click for the menu.
 - The session closes itself after `idleSeconds` of silence (default 90).
 - The badge counts agent results that arrived while disconnected; he reports
   them next time you talk.
@@ -68,7 +71,9 @@ deep = fable. Agents run in `workspaceDir` (default `~`) and are killed after
   the speakers, no mic or window needed. Pass a custom ask after `--`.
 
 - `config.json` holds the model, voice, persona, wake engine and agent
-  settings.
+  settings. `voiceFx` pitch-shifts and gravels everything he says locally
+  (pitch 0.8 = 20% down; gravel 0 to 1); `npm run say` applies the same
+  effect so you can audition changes.
 - `claudeArgs` defaults to `--dangerously-skip-permissions`, matching the
   local shell alias. Remove it there if you want agents to run restricted.
 - The OpenAI key stays in the main process; the renderer only ever sees

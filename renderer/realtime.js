@@ -10,9 +10,6 @@ const RT = (() => {
   let idleTimer = null;
   let cfg = null;
   let hooks = {};
-  let analyser = null;
-  let levelBuf = null;
-  let outCtx = null;
   let outbox = [];
   let armClose = false;
   let goodbyeActive = false;
@@ -25,30 +22,6 @@ const RT = (() => {
   function touch() {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => disconnect('idle'), cfg.idleSeconds * 1000);
-  }
-
-  function hookAnalyser(remoteStream) {
-    const ac = new AudioContext();
-    outCtx = ac;
-    const src = ac.createMediaStreamSource(remoteStream);
-    analyser = ac.createAnalyser();
-    analyser.fftSize = 512;
-    levelBuf = new Uint8Array(analyser.frequencyBinCount);
-    src.connect(analyser);
-    const loop = () => {
-      if (!connected) return;
-      analyser.getByteTimeDomainData(levelBuf);
-      let sum = 0;
-      for (let i = 0; i < levelBuf.length; i++) {
-        const v = (levelBuf[i] - 128) / 128;
-        sum += v * v;
-      }
-      const rms = Math.sqrt(sum / levelBuf.length);
-      if (hooks.onLevel) hooks.onLevel(rms);
-      if (rms > 0.05) touch();
-      requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
   }
 
   async function doTool(item) {
@@ -121,7 +94,8 @@ const RT = (() => {
       for (const track of mic.getAudioTracks()) pc.addTrack(track, mic);
       pc.ontrack = (ev) => {
         audioEl.srcObject = ev.streams[0];
-        hookAnalyser(ev.streams[0]);
+        audioEl.muted = true;
+        VoiceFX.attachStream(ev.streams[0]);
       };
       dc = pc.createDataChannel('oai-events');
       dc.onopen = () => {
@@ -155,7 +129,7 @@ const RT = (() => {
     idleTimer = null;
     if (dc) { try { dc.close(); } catch (e) {} dc = null; }
     if (pc) { try { pc.close(); } catch (e) {} pc = null; }
-    if (outCtx) { try { outCtx.close(); } catch (e) {} outCtx = null; }
+    VoiceFX.detachStream();
     outbox = [];
     armClose = false;
     goodbyeActive = false;
@@ -177,6 +151,7 @@ const RT = (() => {
     connect,
     disconnect,
     say,
+    poke: () => { if (connected) touch(); },
     isConnected: () => connected,
     isConnecting: () => connecting,
   };

@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const oneshot = require('../lib/oneshot');
+const { createGoblinizer } = require('../lib/pitchcore');
 
 const ROOT = path.join(__dirname, '..');
 const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8'));
@@ -40,7 +41,19 @@ oneshot.speak(ask, config, { onChunk: (b64) => chunks.push(Buffer.from(b64, 'bas
     console.error('failed:', r.error);
     process.exit(2);
   }
-  const pcm = Buffer.concat(chunks);
+  let pcm = Buffer.concat(chunks);
+  const fx = config.voiceFx || {};
+  if (fx.enabled) {
+    const n = Math.floor(pcm.length / 2);
+    const f = new Float32Array(n);
+    for (let i = 0; i < n; i++) f[i] = pcm.readInt16LE(2 * i) / 32768;
+    const out = new Float32Array(n);
+    createGoblinizer(fx).process(f, out);
+    const shifted = Buffer.alloc(n * 2);
+    for (let i = 0; i < n; i++) shifted.writeInt16LE(Math.round(Math.max(-1, Math.min(1, out[i])) * 32767), 2 * i);
+    pcm = shifted;
+    console.log(`voiceFx: pitch ${fx.pitch} gravel ${fx.gravel}`);
+  }
   fs.writeFileSync(outFile, Buffer.concat([wavHeader(pcm.length, 24000), pcm]));
   console.log(`voice: ${config.voice}  model: ${config.model}`);
   console.log(`transcript: ${r.transcript}`);
