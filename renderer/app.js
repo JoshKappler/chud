@@ -169,11 +169,12 @@
   // stage. Punches splat blood behind him; wall bounces splat at the wall
   // (the main process spawns that one at the impact point).
   function ouch(fromBounce) {
-    const d = Math.min(10, Goblin.getDamage() + 1);
+    const d = Math.min(20, Goblin.getDamage() + 1);
     Goblin.setDamage(d);
     crunch();
     if (!fromBounce) window.chud.splat();
-    VoiceFX.playUrl(`chud://app/assets/grunts/hit${d}.wav`).catch(() => {});
+    const grunt = Math.min(10, Math.ceil(d / 2));
+    VoiceFX.playUrl(`chud://app/assets/grunts/hit${grunt}.wav`).catch(() => {});
   }
   window.chud.onBounceHurt(() => ouch(true));
 

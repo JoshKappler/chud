@@ -53,10 +53,16 @@ const VoiceFX = (() => {
     }
   }
 
+  let gruntSrc = null;
+
   async function playUrl(url) {
     const res = await fetch(url);
     const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+    if (gruntSrc) {
+      try { gruntSrc.stop(); } catch (e) { /* already ended */ }
+    }
     const src = ctx.createBufferSource();
+    gruntSrc = src;
     src.buffer = buf;
     src.connect(bus);
     src.start();

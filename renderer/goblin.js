@@ -66,6 +66,67 @@ const Goblin = (() => {
     }
   }
 
+  // Damage 10..19: skin falls away in patches spreading from seed points,
+  // each revealed cell painted with what the full skull shows there.
+  const DECAY_SEEDS = [[10, 6], [17, 12], [12, 17], [19, 4], [8, 13]];
+  let skullMap = null;
+  let decayMap = null;
+
+  function buildDecayMaps() {
+    skullMap = new Map();
+    for (let y = 0; y < BASE.length; y++) {
+      for (let x = 0; x < BASE[y].length; x++) {
+        const c = BASE[y][x];
+        if (c !== '.') skullMap.set(x + ',' + y, c === 'o' ? 'o' : 'w');
+      }
+    }
+    for (let yy = 0; yy < 4; yy++) {
+      for (let xx = 0; xx < 4; xx++) {
+        skullMap.set((9 + xx) + ',' + (9 + yy), 'p');
+        skullMap.set((15 + xx) + ',' + (9 + yy), 'p');
+      }
+    }
+    skullMap.set('10,10', 'e');
+    skullMap.set('17,10', 'e');
+    skullMap.set('13,13', 'p');
+    skullMap.set('14,13', 'p');
+    skullMap.set('13,14', 'p');
+    skullMap.set('14,14', 'p');
+    for (let xx = 10; xx <= 17; xx++) {
+      skullMap.set(xx + ',15', 'w');
+      skullMap.set(xx + ',16', xx % 2 ? 'o' : 'w');
+    }
+    skullMap.set('12,3', 'o');
+    skullMap.set('13,4', 'o');
+    skullMap.set('16,6', 'o');
+
+    decayMap = new Map();
+    const ranked = [];
+    for (const key of skullMap.keys()) {
+      const [x, y] = key.split(',').map(Number);
+      let d = Infinity;
+      for (const [sx, sy] of DECAY_SEEDS) d = Math.min(d, Math.hypot(x - sx, y - sy));
+      let h = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+      h = ((h ^ (h >> 13)) % 1000) / 1000;
+      ranked.push([key, d + (h - 0.5) * 3]);
+    }
+    ranked.sort((a, b) => a[1] - b[1]);
+    ranked.forEach(([key], i) => {
+      decayMap.set(key, 1 + Math.floor((i / ranked.length) * 10));
+    });
+  }
+
+  function drawDecay(dy) {
+    if (damage < 10 || damage >= 20) return;
+    if (!decayMap) buildDecayMaps();
+    const stage = damage - 9;
+    for (const [key, thr] of decayMap) {
+      if (thr > stage) continue;
+      const [x, y] = key.split(',').map(Number);
+      px(x, y + dy, skullMap.get(key));
+    }
+  }
+
   const MOUTHS = {
     0: { y: 15, rows: ['w......w', '.oooooo.'] },
     1: { y: 15, rows: ['w......w', '.ommmmo.', '..oooo..'] },
@@ -253,9 +314,9 @@ const Goblin = (() => {
 
     const bobSpeed = state === 'talking' ? 260 : state === 'listening' ? 400 : 900;
     const bob = Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
-    const earsUp = state === 'listening' || now < twitchUntil;
+    const earsUp = (state === 'listening' || now < twitchUntil) && damage < 10;
 
-    if (damage >= 10) {
+    if (damage >= 20) {
       const dy = OY + bob;
       const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
       for (let y = 0; y < BASE.length; y++) {
@@ -317,6 +378,7 @@ const Goblin = (() => {
     drawMap(rows, MOUTH_X, m.y + dy);
     drawBruises(dy);
     drawBlood(dy);
+    drawDecay(dy);
     drawEmote(now);
     drawBadge();
 
@@ -335,7 +397,7 @@ const Goblin = (() => {
     getDamage: () => damage,
     setDamage: (n) => {
       const grew = n > damage;
-      damage = Math.max(0, Math.min(10, n));
+      damage = Math.max(0, Math.min(20, n));
       lastHeal = performance.now();
       if (grew) shakeUntil = performance.now() + 350;
     },
