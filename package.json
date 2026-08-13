@@ -7,6 +7,7 @@
   "scripts": {
     "start": "electron .",
     "get-model": "bash scripts/get-model.sh",
+    "say": "node scripts/say.js",
     "shot": "CHUD_SCREENSHOT=/tmp/chud-shot.png electron ."
   },
   "dependencies": {

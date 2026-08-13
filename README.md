@@ -56,6 +56,9 @@ deep = fable. Agents run in `workspaceDir` (default `~`) and are killed after
 
 ## Notes
 
+- `npm run say` is a quick voice check: one spoken goblin response through
+  the speakers, no mic or window needed. Pass a custom ask after `--`.
+
 - `config.json` holds the model, voice, persona, wake engine and agent
   settings.
 - `claudeArgs` defaults to `--dangerously-skip-permissions`, matching the
