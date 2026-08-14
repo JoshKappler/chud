@@ -138,6 +138,15 @@ const RT = (() => {
     if (was && hooks.onDisconnect) hooks.onDisconnect(reason);
   }
 
+  // Force the turn closed: whatever is in the input buffer becomes the
+  // question and he answers now, without waiting for VAD silence.
+  function respondNow() {
+    if (!connected) return;
+    send({ type: 'input_audio_buffer.commit' });
+    send({ type: 'response.create' });
+    touch();
+  }
+
   function say(text) {
     send({
       type: 'conversation.item.create',
@@ -151,6 +160,7 @@ const RT = (() => {
     connect,
     disconnect,
     say,
+    respondNow,
     poke: () => { if (connected) touch(); },
     isConnected: () => connected,
     isConnecting: () => connecting,

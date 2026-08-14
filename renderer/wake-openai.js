@@ -23,7 +23,7 @@ const WakeOpenAI = (() => {
   async function init(cfg, cb) {
     onWake = cb;
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false },
     });
     audioCtx = new AudioContext({ sampleRate: 24000 });
     const src = audioCtx.createMediaStreamSource(stream);

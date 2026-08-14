@@ -233,8 +233,9 @@
     window.chud.dragState(false);
     down = null;
     if (cleanTap) {
-      if (RT.isConnected()) RT.disconnect('click');
-      else startSession();
+      if (!RT.isConnected()) startSession();
+      else if (Goblin.getState() === 'listening') RT.respondNow();
+      else RT.disconnect('click');
     }
   });
   // Right click punches him. Hold alt while right clicking for the menu.

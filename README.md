@@ -31,11 +31,18 @@ window and every Space.
 
 ## Using him
 
-- Say "hey chud" or just "chud", or left-tap him, to start a session. Say
-  "thanks, chud" (he hangs up after a goodbye grunt) or tap again to hang
-  up. Punches, drags and fling catches never start one. The local Vosk
-  engine keeps its own homophone lists (`localWakeAliases`) since it
-  cannot spell chud.
+- Say "hey chud" or just "chud", or left-tap him, to start a session.
+  While he is listening, tap him again and he stops listening and answers
+  right then; tap while he is answering to hang up, or say "thanks, chud"
+  (he hangs up after a goodbye grunt). Punches, drags and fling catches
+  never start one. The local Vosk engine keeps its own homophone lists
+  (`localWakeAliases`) since it cannot spell chud.
+- Turn-taking is tuned for a noisy room (`vad` in `config.json`):
+  near-field noise reduction plus a loudness gate keep far voices from
+  holding his ear, and he answers about half a second after your voice
+  stops. Raise `threshold` if office chatter still reaches him, lower it
+  if he misses your quiet speech; `silenceMs` is how long he waits before
+  deciding you are done.
 - Drag him anywhere; he drifts around the screen edges like flotsam.
   Fling him and he ricochets off the screen edges until the water drag
   slows him back into his drift.
