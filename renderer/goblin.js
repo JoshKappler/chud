@@ -33,6 +33,22 @@ const Goblin = (() => {
     }
   }
 
+  // Shrinks apply at once (an oversized window risks a wall clamp);
+  // grows and direction flips must hold 150ms so wiggling cannot thrash
+  // window resizes, which read as jerky vertical drags.
+  function requestGeometry(hx, hy, cw, ch, now) {
+    if (hx === headOX && hy === headOY && cw === cellsW && ch === cellsH) {
+      geomPend = '';
+      return;
+    }
+    const key = hx + ',' + hy + ',' + cw + ',' + ch;
+    if (key !== geomPend) {
+      geomPend = key;
+      geomPendAt = now;
+    }
+    if (cw < cellsW || ch < cellsH || now - geomPendAt > 150) applyGeometry(hx, hy, cw, ch);
+  }
+
   const PAL = {
     o: '#131a0c', g: '#57a63f', d: '#37702a', l: '#8fd457',
     e: '#ffd83d', p: '#1b140d', w: '#f5efd7', m: '#33121a',
@@ -48,9 +64,9 @@ const Goblin = (() => {
     '........olggggggggdo........',
     'oo.....olggggggggggdo.....oo',
     'olggo..olggggggggggdo..oggdo',
-    'olgggoolggggggggggggdoogggdo',
-    '.ogggoolggggggggggggdooggdo.',
-    '..oggoolggggggggggggdooggo..',
+    'olggggglggggggggggggggggggdo',
+    '.oggggglgggggggggggggggggdo.',
+    '..ogggglgggggggggggggggggo..',
     '....ooolggggggggggggdooo....',
     '......olggggggggggggdo......',
     '......olggggggggggggdo......',
@@ -188,10 +204,14 @@ const Goblin = (() => {
   let cellsW = 28;
   let cellsH = 28;
   let gDragging = false;
-  let gDirX = 0;
-  let gDirY = 0;
-  let gDirCand = '';
-  let gDirSince = 0;
+  let geomPend = '';
+  let geomPendAt = 0;
+
+  // Stretch eases in continuously with speed: barely past 450 px/s it is
+  // near zero, 1.0 around 1450, capped ridiculous at 2.2 when flung hard.
+  function stretchF(sp) {
+    return Math.min(2.2, Math.pow(Math.max(0, sp - 450) / 1000, 1.2));
+  }
 
   function px(x, y, c) {
     if (pxTarget) {
@@ -387,7 +407,19 @@ const Goblin = (() => {
     px(16, 6 + dy, 'o');
   }
 
-  function drawSkin(now, dy, gtier) {
+  function drawMouth(dy) {
+    const m = MOUTHS[mouthFrame()];
+    let rows = damage >= 3 ? m.rows.map((r) => (r[0] === 'w' ? '.' + r.slice(1) : r)) : m.rows;
+    if (damage >= 6) rows = rows.map((r) => (r[r.length - 1] === 'w' ? r.slice(0, -1) + '.' : r));
+    drawMap(rows, MOUTH_X, m.y + dy);
+  }
+
+  // Features come in one at a time as speed climbs, so no single frame
+  // swaps the whole face: cheeks, then wide eyes and a pursed mouth,
+  // then flapping lips once the stretch has real depth.
+  function drawSkin(now, dy) {
+    const sp = Math.hypot(gvx, gvy);
+    const f = stretchF(sp);
     for (let y = 0; y < BASE.length; y++) {
       for (let x = 0; x < BASE[y].length; x++) {
         const c = BASE[y][x];
@@ -397,19 +429,26 @@ const Goblin = (() => {
     for (const [x, y, c] of WARTS) px(x, y + dy, c);
     drawMap(['..oo', '.oll', 'olll', '.oll', '..oo'], 3, 11 + dy);
     drawMap(['oo..', 'llo.', 'lllo', 'llo.', 'oo..'], 21, 11 + dy);
-    for (const anchor of [EYE_L, EYE_R]) {
-      for (let yy = 0; yy < 4; yy++)
-        for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, anchor.y - 1 + yy + dy, 'e');
-      const pdx = Math.abs(gvx) < Math.hypot(gvx, gvy) / 3 ? 1 : gvx > 0 ? 0 : 2;
-      px(anchor.x + pdx, anchor.y + 1 + dy, 'p');
-      px(anchor.x + pdx + 1, anchor.y + 1 + dy, 'p');
+    if (sp > 280) {
+      for (const anchor of [EYE_L, EYE_R]) {
+        for (let yy = 0; yy < 4; yy++)
+          for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, anchor.y - 1 + yy + dy, 'e');
+        const pdx = Math.abs(gvx) < sp / 3 ? 1 : gvx > 0 ? 0 : 2;
+        px(anchor.x + pdx, anchor.y + 1 + dy, 'p');
+        px(anchor.x + pdx + 1, anchor.y + 1 + dy, 'p');
+      }
+    } else {
+      drawEye(EYE_L, dy, now);
+      drawEye(EYE_R, dy, now);
     }
     drawNose(dy);
-    if (gtier === 1) {
-      drawMap(['.oo.', 'ommo', '.oo.'], 12, 14 + dy);
-    } else {
+    if (f > 0.35) {
       const flap = MOUTHS[Math.floor(now / 90) % 2 ? 2 : 3];
       drawMap(flap.rows, MOUTH_X, flap.y + dy);
+    } else if (sp > 280) {
+      drawMap(['.oo.', 'ommo', '.oo.'], 12, 14 + dy);
+    } else {
+      drawMouth(dy);
     }
     drawBruises(dy);
     drawBlood(dy);
@@ -424,9 +463,10 @@ const Goblin = (() => {
   // trailing side. At damage 20 the bare skull stretches the same way.
   function drawGForce(now, dy, gspeed, gtier) {
     if (gtier === 1) {
-      drawSkin(now, dy, 1);
+      drawSkin(now, dy);
       return;
     }
+    const f = stretchF(gspeed);
     const ux = gvx / gspeed;
     const uy = gvy / gspeed;
     pxTarget = new Map();
@@ -438,25 +478,27 @@ const Goblin = (() => {
       px(11, 2 + dy, 'r');
       px(17, 3 + dy, 'R');
     } else {
-      drawSkin(now, dy, gtier);
+      drawSkin(now, dy);
       const bx = Math.round(-ux);
       const by = Math.round(-uy);
-      for (const anchor of [EYE_L, EYE_R]) {
-        if (bx) {
-          const gx = bx < 0 ? anchor.x - 1 : anchor.x + 4;
-          for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'o');
-          if (gtier === 3) {
-            for (let yy = 1; yy <= 3; yy++) px(gx + bx, anchor.y + yy + dy, 'o');
-          }
-        } else {
-          const gy = by < 0 ? anchor.y - 2 : anchor.y + 3;
-          const temple = anchor === EYE_L ? anchor.x - 1 : anchor.x + 4;
-          for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'o');
-          px(temple, gy + dy, 'o');
-          if (gtier === 3) {
-            px(anchor.x + 1, gy + by + dy, 'o');
-            px(anchor.x + 2, gy + by + dy, 'o');
-            px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'o');
+      if (f > 0.35) {
+        for (const anchor of [EYE_L, EYE_R]) {
+          if (bx) {
+            const gx = bx < 0 ? anchor.x - 1 : anchor.x + 4;
+            for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'o');
+            if (f > 0.9) {
+              for (let yy = 1; yy <= 3; yy++) px(gx + bx, anchor.y + yy + dy, 'o');
+            }
+          } else {
+            const gy = by < 0 ? anchor.y - 2 : anchor.y + 3;
+            const temple = anchor === EYE_L ? anchor.x - 1 : anchor.x + 4;
+            for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'o');
+            px(temple, gy + dy, 'o');
+            if (f > 0.9) {
+              px(anchor.x + 1, gy + by + dy, 'o');
+              px(anchor.x + 2, gy + by + dy, 'o');
+              px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'o');
+            }
           }
         }
       }
@@ -471,8 +513,7 @@ const Goblin = (() => {
       if (p > pMax) pMax = p;
       if (p < pMin) pMin = p;
     }
-    const f = gtier === 3 ? 1.0 : 0.45;
-    const amp = gtier === 3 ? 2.5 : 1;
+    const amp = Math.min(3, 2.5 * f);
     const depth = pMax - pMin;
     const span = depth * (1 + f);
     const lin = f * 0.6;
@@ -521,7 +562,7 @@ const Goblin = (() => {
         lastPT = now;
       } else if (now > lastPT) {
         const gdt = (now - lastPT) / 1000;
-        const a = Math.min(1, gdt * 12);
+        const a = Math.min(1, gdt * 7);
         gvx += ((window.screenX - lastPX) / gdt - gvx) * a;
         gvy += ((window.screenY - lastPY) / gdt - gvy) * a;
         lastPX = window.screenX;
@@ -543,7 +584,7 @@ const Goblin = (() => {
     const earsUp = (state === 'listening' || now < twitchUntil) && damage < 10;
 
     const gspeed = Math.hypot(gvx, gvy);
-    const gtier = gspeed > 900 ? 3 : gspeed > 450 ? 2 : gspeed > 150 ? 1 : 0;
+    const gtier = gspeed > 450 ? 2 : gspeed > 150 ? 1 : 0;
     if (damage >= 20 && gtier < 2) {
       const dy = OY + bob;
       const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
@@ -563,37 +604,24 @@ const Goblin = (() => {
     if (gtier >= 2 && gDragging && gspeed > 0) {
       // Tail room is capped to the space between the head and the screen
       // edge: a window edge past the wall would clamp in drift and fire
-      // phantom hurts. Quantized to whole 7-cell steps to limit resizes,
-      // and the direction must hold 150ms before the geometry flips.
+      // phantom hurts. Sized to the tail, quantized to 14-cell steps.
       const tbx = Math.round(-gvx / gspeed);
       const tby = Math.round(-gvy / gspeed);
-      if (tbx !== gDirX || tby !== gDirY) {
-        const cand = tbx + ',' + tby;
-        if (cand !== gDirCand) {
-          gDirCand = cand;
-          gDirSince = now;
-        } else if (now - gDirSince > 150) {
-          gDirX = tbx;
-          gDirY = tby;
-        }
-      }
+      const want = Math.min(56, Math.ceil((28 * stretchF(gspeed)) / 14) * 14);
       const scr = window.screen;
       const headSX = window.screenX + headOX * S;
       const headSY = window.screenY + headOY * S;
       let gw = 0;
       let gh = 0;
-      if (gDirX < 0) gw = (headSX - scr.availLeft) / S;
-      else if (gDirX > 0) gw = (scr.availLeft + scr.availWidth - headSX - 28 * S) / S;
-      if (gDirY < 0) gh = (headSY - scr.availTop) / S;
-      else if (gDirY > 0) gh = (scr.availTop + scr.availHeight - headSY - 28 * S) / S;
-      gw = Math.floor(Math.max(0, Math.min(28, gw)) / 7) * 7;
-      gh = Math.floor(Math.max(0, Math.min(28, gh)) / 7) * 7;
-      applyGeometry(gDirX < 0 ? gw : 0, gDirY < 0 ? gh : 0, 28 + gw, 28 + gh);
+      if (tbx < 0) gw = (headSX - scr.availLeft) / S;
+      else if (tbx > 0) gw = (scr.availLeft + scr.availWidth - headSX - 28 * S) / S;
+      if (tby < 0) gh = (headSY - scr.availTop) / S;
+      else if (tby > 0) gh = (scr.availTop + scr.availHeight - headSY - 28 * S) / S;
+      gw = Math.min(want, Math.floor(Math.max(0, Math.min(56, gw)) / 14) * 14);
+      gh = Math.min(want, Math.floor(Math.max(0, Math.min(56, gh)) / 14) * 14);
+      requestGeometry(tbx < 0 ? gw : 0, tby < 0 ? gh : 0, 28 + gw, 28 + gh, now);
     } else {
-      applyGeometry(0, 0, 28, 28);
-      gDirX = 0;
-      gDirY = 0;
-      gDirCand = '';
+      requestGeometry(0, 0, 28, 28, now);
     }
     if (gtier > 0) {
       drawGForce(now, OY + bob, gspeed, gtier);
@@ -619,10 +647,7 @@ const Goblin = (() => {
     drawEye(EYE_R, dy, now);
     drawBrows(dy);
     drawNose(dy);
-    const m = MOUTHS[mouthFrame()];
-    let rows = damage >= 3 ? m.rows.map((r) => (r[0] === 'w' ? '.' + r.slice(1) : r)) : m.rows;
-    if (damage >= 6) rows = rows.map((r) => (r[r.length - 1] === 'w' ? r.slice(0, -1) + '.' : r));
-    drawMap(rows, MOUTH_X, m.y + dy);
+    drawMouth(dy);
     drawBruises(dy);
     drawBlood(dy);
     drawDecay(dy);
