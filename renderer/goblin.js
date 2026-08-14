@@ -155,8 +155,19 @@ const Goblin = (() => {
   let shakeUntil = 0;
   let offX = 0;
   let healMs = 180000;
+  let gvx = 0;
+  let gvy = 0;
+  let gvManual = false;
+  let lastPX = null;
+  let lastPY = 0;
+  let lastPT = 0;
+  let pxTarget = null;
 
   function px(x, y, c) {
+    if (pxTarget) {
+      pxTarget.set(x + ',' + y, c);
+      return;
+    }
     ctx.fillStyle = damage >= 8 && PALE[c] ? PALE[c] : PAL[c];
     ctx.fillRect((x + offX) * S, y * S, S, S);
   }
@@ -221,11 +232,11 @@ const Goblin = (() => {
       if (damage < lvl) continue;
       for (const [x, y, c] of BLOTCHES[lvl]) px(x, y + dy, c);
     }
-    if (damage >= 4) {
+    if (damage >= 4 && !gStretch) {
       ctx.clearRect((1 + offX) * S, (5 + dy) * S, S, S);
       ctx.clearRect((2 + offX) * S, (6 + dy) * S, S, S);
     }
-    if (damage >= 6) {
+    if (damage >= 6 && !gStretch) {
       ctx.clearRect((26 + offX) * S, (5 + dy) * S, S, S);
       ctx.clearRect((25 + offX) * S, (6 + dy) * S, S, S);
     }
@@ -301,8 +312,146 @@ const Goblin = (() => {
     drawMap(DIGITS[text], 22, 22);
   }
 
+  function drawSkullFace(dy, jaw) {
+    for (let y = 0; y < BASE.length; y++) {
+      for (let x = 0; x < BASE[y].length; x++) {
+        const c = BASE[y][x];
+        if (c === '.') continue;
+        px(x, y + dy + (y >= 15 ? jaw : 0), c === 'o' ? 'o' : 'w');
+      }
+    }
+    for (let yy = 0; yy < 4; yy++) {
+      for (let xx = 0; xx < 4; xx++) {
+        px(9 + xx, 9 + yy + dy, 'p');
+        px(15 + xx, 9 + yy + dy, 'p');
+      }
+    }
+    px(10, 10 + dy, 'e');
+    px(17, 10 + dy, 'e');
+    px(13, 13 + dy, 'p');
+    px(14, 13 + dy, 'p');
+    px(13, 14 + dy, 'p');
+    px(14, 14 + dy, 'p');
+    for (let xx = 10; xx <= 17; xx++) {
+      px(xx, 15 + dy + jaw, 'w');
+      px(xx, 16 + dy + jaw, xx % 2 ? 'o' : 'w');
+    }
+    px(12, 3 + dy, 'o');
+    px(13, 4 + dy, 'o');
+    px(16, 6 + dy, 'o');
+  }
+
+  function drawSkin(now, dy, gtier) {
+    for (let y = 0; y < BASE.length; y++) {
+      for (let x = 0; x < BASE[y].length; x++) {
+        const c = BASE[y][x];
+        if (c !== '.') px(x, y + dy, c);
+      }
+    }
+    for (const [x, y, c] of WARTS) px(x, y + dy, c);
+    drawMap(['..oo', '.oll', 'olll', '.oll', '..oo'], 3, 11 + dy);
+    drawMap(['oo..', 'llo.', 'lllo', 'llo.', 'oo..'], 21, 11 + dy);
+    for (const anchor of [EYE_L, EYE_R]) {
+      if (gtier === 1) {
+        for (let yy = 0; yy < 4; yy++)
+          for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, anchor.y - 1 + yy + dy, 'e');
+        const pdx = Math.abs(gvx) < Math.hypot(gvx, gvy) / 3 ? 1 : gvx > 0 ? 0 : 2;
+        px(anchor.x + pdx, anchor.y + 1 + dy, 'p');
+        px(anchor.x + pdx + 1, anchor.y + 1 + dy, 'p');
+      } else {
+        for (let xx = 0; xx < 4; xx++) {
+          px(anchor.x + xx, anchor.y + dy, 'e');
+          px(anchor.x + xx, anchor.y + 1 + dy, 'p');
+        }
+      }
+    }
+    drawNose(dy);
+    if (gtier === 1) {
+      drawMap(['.oo.', 'ommo', '.oo.'], 12, 14 + dy);
+    } else {
+      const flap = MOUTHS[Math.floor(now / 90) % 2 ? 2 : 3];
+      drawMap(flap.rows, MOUTH_X, flap.y + dy);
+    }
+    drawBruises(dy);
+    drawBlood(dy);
+  }
+
+  // Cartoon G-force face. Tier 1: balloon cheeks, pursed mouth, trailing
+  // pupils. Tier 2 up: the skin is one continuous sheet gripped on the
+  // side leading the acceleration and stretched flat toward the back; a
+  // few bone flecks painted trailing each eye stand in for the skull.
+  function drawGForce(now, dy, gspeed, gtier) {
+    if (gtier === 1) {
+      drawSkin(now, dy, 1);
+      return;
+    }
+    const ux = gvx / gspeed;
+    const uy = gvy / gspeed;
+    pxTarget = new Map();
+    drawSkin(now, dy, gtier);
+    const bx = Math.round(-ux);
+    const by = Math.round(-uy);
+    for (const anchor of [EYE_L, EYE_R]) {
+      for (let yy = 0; yy < 2; yy++) {
+        for (let xx = 0; xx < 4; xx++) {
+          for (let d = 1; d <= (gtier === 3 ? 2 : 1); d++) {
+            const tx = anchor.x + xx + bx * d;
+            const ty = anchor.y + yy + dy + by * d;
+            const inEye = tx >= anchor.x && tx < anchor.x + 4
+              && ty >= anchor.y + dy && ty < anchor.y + dy + 2;
+            if (!inEye) px(tx, ty, 'w');
+          }
+        }
+      }
+    }
+    const buf = pxTarget;
+    pxTarget = null;
+    let pMax = -Infinity;
+    let pMin = Infinity;
+    for (const key of buf.keys()) {
+      const [bx, by] = key.split(',').map(Number);
+      const p = bx * ux + by * uy;
+      if (p > pMax) pMax = p;
+      if (p < pMin) pMin = p;
+    }
+    const f = gtier === 3 ? 0.25 : 0.1;
+    const lag = (pMax - pMin) * f;
+    for (let Y = -8; Y < 32; Y++) {
+      for (let X = -8; X < 36; X++) {
+        const p = X * ux + Y * uy;
+        if (p > pMax || p < pMin - lag) continue;
+        const off = -X * uy + Y * ux;
+        const ps = pMax - (pMax - p) / (1 + f);
+        const xs = Math.round(ps * ux - off * uy);
+        const ys = Math.round(ps * uy + off * ux);
+        const c = buf.get(xs + ',' + ys);
+        if (!c) continue;
+        ctx.fillStyle = damage >= 8 && PALE[c] ? PALE[c] : PAL[c];
+        ctx.fillRect((X + offX) * S, Y * S, S, S);
+      }
+    }
+  }
+
   function render(now) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Window velocity from the window's own screen position, smoothed,
+    // feeds the G-force face; setMotion overrides it for test pages.
+    if (!gvManual) {
+      if (lastPX === null) {
+        lastPX = window.screenX;
+        lastPY = window.screenY;
+        lastPT = now;
+      } else if (now > lastPT) {
+        const gdt = (now - lastPT) / 1000;
+        const a = Math.min(1, gdt * 12);
+        gvx += ((window.screenX - lastPX) / gdt - gvx) * a;
+        gvy += ((window.screenY - lastPY) / gdt - gvy) * a;
+        lastPX = window.screenX;
+        lastPY = window.screenY;
+        lastPT = now;
+      }
+    }
 
     if (now > nextBlink) { blinkUntil = now + 140; nextBlink = now + 2200 + Math.random() * 3800; }
     if (now > nextTwitch) { twitchUntil = now + 160; nextTwitch = now + 3500 + Math.random() * 5000; }
@@ -319,37 +468,22 @@ const Goblin = (() => {
     if (damage >= 20) {
       const dy = OY + bob;
       const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
-      for (let y = 0; y < BASE.length; y++) {
-        for (let x = 0; x < BASE[y].length; x++) {
-          const c = BASE[y][x];
-          if (c === '.') continue;
-          px(x, y + dy + (y >= 15 ? jaw : 0), c === 'o' ? 'o' : 'w');
-        }
-      }
-      for (let yy = 0; yy < 4; yy++) {
-        for (let xx = 0; xx < 4; xx++) {
-          px(9 + xx, 9 + yy + dy, 'p');
-          px(15 + xx, 9 + yy + dy, 'p');
-        }
-      }
-      px(10, 10 + dy, 'e');
-      px(17, 10 + dy, 'e');
-      px(13, 13 + dy, 'p');
-      px(14, 13 + dy, 'p');
-      px(13, 14 + dy, 'p');
-      px(14, 14 + dy, 'p');
-      for (let xx = 10; xx <= 17; xx++) {
-        px(xx, 15 + dy + jaw, 'w');
-        px(xx, 16 + dy + jaw, xx % 2 ? 'o' : 'w');
-      }
-      px(12, 3 + dy, 'o');
-      px(13, 4 + dy, 'o');
-      px(16, 6 + dy, 'o');
+      drawSkullFace(dy, jaw);
       px(9, 13 + dy, 'r');
       px(9, 14 + dy, 'R');
       px(18, 13 + dy, 'r');
       px(11, 2 + dy, 'r');
       px(17, 3 + dy, 'R');
+      drawEmote(now);
+      drawBadge();
+      requestAnimationFrame(render);
+      return;
+    }
+
+    const gspeed = Math.hypot(gvx, gvy);
+    const gtier = damage >= 10 ? 0 : gspeed > 2100 ? 3 : gspeed > 1400 ? 2 : gspeed > 550 ? 1 : 0;
+    if (gtier > 0) {
+      drawGForce(now, OY + bob, gspeed, gtier);
       drawEmote(now);
       drawBadge();
       requestAnimationFrame(render);
@@ -394,6 +528,7 @@ const Goblin = (() => {
     setBadge: (n) => { badge = n; },
     setEmote: (s) => { emote = s; },
     setHealSeconds: (s) => { healMs = Math.max(1, s) * 1000; },
+    setMotion: (x, y) => { gvManual = true; gvx = x; gvy = y; },
     getDamage: () => damage,
     setDamage: (n) => {
       const grew = n > damage;
