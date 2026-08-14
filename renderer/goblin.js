@@ -175,16 +175,14 @@ const Goblin = (() => {
   let lastPT = 0;
   let lastFrameT = 0;
 
-  // Skin spring state: the lag vector chases the opposite of the window's
-  // velocity; squash pulses on sharp slowdowns and direction flips.
-  let lagX = 0, lagY = 0, lagVX = 0, lagVY = 0;
-  let sq = 0, sqV = 0;
-  let prevVX = 0, prevVY = 0;
+  // Skin state comes from lib/skinphys: the lag vector rides the
+  // base-excited spring on the motion's real derivative chain, squash
+  // pumps on braking, flutter reads snap, crackle and pop.
+  const skin = SkinPhys.createSkin();
+  let lagX = 0, lagY = 0;
+  let sq = 0;
+  let flutter = 0;
   let dirX = 0, dirY = 1;
-  const LAG_W = 11;
-  const LAG_Z = 0.4;
-  const SQ_W = 14;
-  const SQ_Z = 0.3;
 
   // Stretch grows continuously with the lag magnitude: a hint past a slow
   // drag, a full extra head-length around 1500 px/s, capped at 1.2 extra
@@ -627,28 +625,6 @@ const Goblin = (() => {
     gl.drawElements(gl.TRIANGLES, idxArr.length, gl.UNSIGNED_SHORT, 0);
   }
 
-  function stepSkin(dt) {
-    lagVX += ((-gvx - lagX) * LAG_W * LAG_W - 2 * LAG_Z * LAG_W * lagVX) * dt;
-    lagVY += ((-gvy - lagY) * LAG_W * LAG_W - 2 * LAG_Z * LAG_W * lagVY) * dt;
-    lagX += lagVX * dt;
-    lagY += lagVY * dt;
-    const pv = Math.hypot(prevVX, prevVY);
-    if (pv > 500) {
-      const brake = (prevVX * (prevVX - gvx) + prevVY * (prevVY - gvy)) / pv;
-      if (brake > pv * 0.06) sqV += Math.min(6, brake / 250);
-    }
-    sqV += (-sq * SQ_W * SQ_W - 2 * SQ_Z * SQ_W * sqV) * dt;
-    sq += sqV * dt;
-    sq = Math.max(-0.5, Math.min(0.85, sq));
-    prevVX = gvx;
-    prevVY = gvy;
-    const sp = Math.hypot(lagX, lagY);
-    if (sp > 40) {
-      dirX = lagX / sp;
-      dirY = lagY / sp;
-    }
-  }
-
   // Sock deformation: the side leading the acceleration stays gripped,
   // the trailing side lags on a 60/40 linear-cubic profile, rippling and
   // thinning toward the tip. When the tail outgrows the pad the whole
@@ -656,7 +632,7 @@ const Goblin = (() => {
   function deform(now) {
     const sp = Math.hypot(lagX, lagY);
     const E = extension(sp);
-    if (E < 0.01 && Math.abs(sq) < 0.01) {
+    if (E < 0.01 && Math.abs(sq) < 0.01 && flutter < 0.05) {
       verts.set(ident);
       return;
     }
@@ -675,7 +651,8 @@ const Goblin = (() => {
       const a = Math.min(1, Math.max(0, (14 - p) / HEAD));
       const ease = a * (0.6 + 0.4 * a * a);
       const disp = E * HEAD * ease - adv;
-      const wave = amp * a * a * Math.sin(now / 70 - a * 5);
+      const wave = amp * a * a * Math.sin(now / 70 - a * 5)
+        + flutter * 1.1 * Math.sin(now / 24 + a * 7 + o * 0.9);
       const p2 = p * axS - disp;
       const o2 = (o + wave) * offS * (1 - 0.18 * E * a * a);
       const wx = c - ux * p2 + uy * o2;
@@ -696,8 +673,9 @@ const Goblin = (() => {
     const dt = Math.min(0.05, Math.max(0.001, (now - lastFrameT) / 1000));
     lastFrameT = now;
 
-    // Window velocity from the window's own screen position, smoothed;
-    // setMotion overrides it for test pages.
+    // Raw window velocity from the window's own screen position; the
+    // skinphys filter chain owns all smoothing so a yank reaches the
+    // skin the frame it happens. setMotion overrides for test pages.
     if (!gvManual) {
       if (lastPX === null) {
         lastPX = window.screenX;
@@ -705,9 +683,8 @@ const Goblin = (() => {
         lastPT = now;
       } else if (now > lastPT) {
         const gdt = (now - lastPT) / 1000;
-        const a = Math.min(1, gdt * 7);
-        gvx += ((window.screenX - lastPX) / gdt - gvx) * a;
-        gvy += ((window.screenY - lastPY) / gdt - gvy) * a;
+        gvx = (window.screenX - lastPX) / gdt;
+        gvy = (window.screenY - lastPY) / gdt;
         lastPX = window.screenX;
         lastPY = window.screenY;
         lastPT = now;
@@ -722,7 +699,13 @@ const Goblin = (() => {
 
     shownLevel = Math.max(level, shownLevel * 0.75);
 
-    stepSkin(dt);
+    const sk = skin.step(gvx, gvy, dt);
+    lagX = sk.lagX;
+    lagY = sk.lagY;
+    sq = sk.sq;
+    flutter = sk.flutter;
+    dirX = sk.dirX;
+    dirY = sk.dirY;
     drawFace(now);
     drawOverlay(now);
     deform(now);

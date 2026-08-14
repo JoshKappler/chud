@@ -39,14 +39,17 @@ window and every Space.
 - Drag him anywhere; he drifts around the screen edges like flotsam.
   Fling him and he ricochets off the screen edges until the water drag
   slows him back into his drift.
-- Yank him around fast and G forces take his face. His skin rides a
-  spring: it lags behind the motion like a loose bag, stretching up to
-  double his breadth on a wild fling, and when he stops it snaps back,
-  overshoots and wobbles; hard reversals squash him flat before he
-  rebounds. Cheeks balloon and the mouth purses as speed builds, then
-  lips flap and a black sagging gap opens on each eye's trailing side.
-  The window carries a transparent margin so the tail always fits; only
-  the head square catches the mouse.
+- Yank him around fast and G forces take his face. His skin runs on
+  real kinematics (`lib/skinphys.js`): the window's motion is
+  differentiated into acceleration, jerk, snap, crackle and pop, and the
+  skin lags on a base-excited spring, so a yank reaches it the frame it
+  happens. It stretches up to double his breadth on a wild fling, snaps
+  back with an overshoot wobble when he stops, squashes flat on hard
+  reversals, and flutters under violent shaking. Cheeks balloon and the
+  mouth purses as speed builds, then lips flap and a black sagging gap
+  opens on each eye's trailing side. The window carries a transparent
+  margin so the tail always fits; only the head square catches the
+  mouse.
 - Right click to punch him. Hard wall bounces and held drag-bashes into a
   monitor edge hurt too. Twenty damage stages: bruises, cuts and blood
   through stage 9, then the skin falls away patch by patch from stage 10,
