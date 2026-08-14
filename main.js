@@ -32,9 +32,15 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let win = null;
+let dragging = false;
 
+// The goblin head is 28 cells, centered in an 84-cell window; the margin
+// is transparent room for the G-force stretch tail, so the visible head
+// square sits pad px in from every window edge.
 function createWindow() {
-  const side = 28 * (config.spriteScale || 4);
+  const scale = config.spriteScale || 4;
+  const pad = 28 * scale;
+  const side = 84 * scale;
   win = new BrowserWindow({
     width: side,
     height: side,
@@ -55,7 +61,10 @@ function createWindow() {
   const edge = process.env.CHUD_EDGE || 'punch';
   const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}&edge=${edge}&seed=7` : '';
   win.loadURL(`chud://app/renderer/${page}.html${qs}`);
-  if (!SCREENSHOT) drift.start(win);
+  if (!SCREENSHOT) {
+    drift.start(win, pad);
+    startCursorPoll(pad);
+  }
 
   if (SCREENSHOT) {
     win.webContents.once('did-finish-load', () => {
@@ -66,6 +75,25 @@ function createWindow() {
       }, 1200);
     });
   }
+}
+
+// Only the head square should catch the mouse; the transparent margin
+// passes clicks through. Dragging keeps the window interactive so a
+// cursor that outruns the chasing window cannot sever the drag.
+function startCursorPoll(pad) {
+  let ignoring = false;
+  setInterval(() => {
+    if (!win || win.isDestroyed()) return;
+    const c = screen.getCursorScreenPoint();
+    const b = win.getBounds();
+    const over = c.x >= b.x + pad && c.x < b.x + b.width - pad
+      && c.y >= b.y + pad && c.y < b.y + b.height - pad;
+    const want = !over && !dragging;
+    if (want !== ignoring) {
+      ignoring = want;
+      win.setIgnoreMouseEvents(want);
+    }
+  }, 50);
 }
 
 app.whenReady().then(async () => {
@@ -105,9 +133,13 @@ ipcMain.on('wake-start', () => {
   }
 });
 ipcMain.on('wake-audio', (e, buf) => wakewatch.append(buf));
-ipcMain.on('drag-state', (e, v) => drift.setDragging(!!v));
+ipcMain.on('drag-state', (e, v) => {
+  dragging = !!v;
+  drift.setDragging(dragging);
+});
 ipcMain.handle('win-grab', () => {
   const wasFlinging = drift.getMode() === 'fling';
+  dragging = true;
   drift.setDragging(true);
   return { wasFlinging };
 });

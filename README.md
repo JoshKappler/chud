@@ -39,12 +39,14 @@ window and every Space.
 - Drag him anywhere; he drifts around the screen edges like flotsam.
   Fling him and he ricochets off the screen edges until the water drag
   slows him back into his drift.
-- Yank him around fast and G forces take his face: cheeks balloon and
-  the mouth purses, then the skin becomes a sock gripped on the side
-  leading the acceleration, trailing up to a full head-length behind
-  him, rippling in the wind, lips flapping, the eyes wide with a black
-  sagging gap on their trailing side. The window quietly grows to fit
-  the tail and shrinks back after.
+- Yank him around fast and G forces take his face. His skin rides a
+  spring: it lags behind the motion like a loose bag, stretching up to
+  double his breadth on a wild fling, and when he stops it snaps back,
+  overshoots and wobbles; hard reversals squash him flat before he
+  rebounds. Cheeks balloon and the mouth purses as speed builds, then
+  lips flap and a black sagging gap opens on each eye's trailing side.
+  The window carries a transparent margin so the tail always fits; only
+  the head square catches the mouse.
 - Right click to punch him. Hard wall bounces and held drag-bashes into a
   monitor edge hurt too. Twenty damage stages: bruises, cuts and blood
   through stage 9, then the skin falls away patch by patch from stage 10,

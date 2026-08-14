@@ -201,8 +201,13 @@
   let down = null;
   let dragged = false;
   let lastPunch = 0;
+  // The canvas carries a transparent margin around the 28-cell head for
+  // the stretch tail; only the head square is him.
+  const cell = cfg.spriteScale || 4;
+  const onHead = (e) => e.offsetX >= 28 * cell && e.offsetX < 56 * cell
+    && e.offsetY >= 28 * cell && e.offsetY < 56 * cell;
   canvas.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !onHead(e)) return;
     const d = { x: e.screenX, y: e.screenY, t: Date.now(), wasFlinging: false };
     down = d;
     dragged = false;
@@ -235,6 +240,7 @@
   // Right click punches him. Hold alt while right clicking for the menu.
   canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+    if (!onHead(e)) return;
     lastPunch = Date.now();
     if (e.altKey) window.chud.menu({ muted: Wake.isMuted(), connected: RT.isConnected() });
     else ouch();

@@ -1,53 +1,28 @@
-// 8-bit goblin sprite. Drawn from a character grid plus overlays for eyes, mouth,
-// brows, thinking dots and the agent badge. All coordinates are logical pixels.
+// 8-bit goblin on a spring-loaded skinbag. The face is drawn from a
+// character grid into a 28x28 offscreen texture, then rendered through a
+// WebGL quad grid whose vertices chase the window's motion on an
+// underdamped spring: accelerate and the skin stretches out behind him,
+// stop and it snaps back, overshoots and wobbles; hard reversals squash
+// him flat before he rebounds. The head sits centered in a fixed window
+// padded by PAD cells on every side so the tail always fits.
 const Goblin = (() => {
   const canvas = document.getElementById('goblin');
-  const ctx = canvas.getContext('2d');
+  const HEAD = 28;
+  const PAD = 28;
+  const GRID = HEAD + 2 * PAD;
   let S = 4;
   const OY = 1;
 
-  function setScale(n) {
-    S = n;
-    canvas.width = cellsW * S;
-    canvas.height = cellsH * S;
-  }
-
-  // Grows the canvas and window to fit the stretched sock and pins the
-  // head to the same screen spot by shifting the window origin. lastPX
-  // and lastPY absorb the shift so the velocity poll sees no jump.
-  function applyGeometry(hx, hy, cw, ch) {
-    if (hx === headOX && hy === headOY && cw === cellsW && ch === cellsH) return;
-    const mx = (headOX - hx) * S;
-    const my = (headOY - hy) * S;
-    headOX = hx;
-    headOY = hy;
-    cellsW = cw;
-    cellsH = ch;
-    canvas.width = cw * S;
-    canvas.height = ch * S;
-    window.resizeTo(cw * S, ch * S);
-    if (mx || my) {
-      window.moveTo(window.screenX + mx, window.screenY + my);
-      lastPX += mx;
-      lastPY += my;
-    }
-  }
-
-  // Shrinks apply at once (an oversized window risks a wall clamp);
-  // grows and direction flips must hold 150ms so wiggling cannot thrash
-  // window resizes, which read as jerky vertical drags.
-  function requestGeometry(hx, hy, cw, ch, now) {
-    if (hx === headOX && hy === headOY && cw === cellsW && ch === cellsH) {
-      geomPend = '';
-      return;
-    }
-    const key = hx + ',' + hy + ',' + cw + ',' + ch;
-    if (key !== geomPend) {
-      geomPend = key;
-      geomPendAt = now;
-    }
-    if (cw < cellsW || ch < cellsH || now - geomPendAt > 150) applyGeometry(hx, hy, cw, ch);
-  }
+  const face = document.createElement('canvas');
+  face.width = HEAD;
+  face.height = HEAD;
+  const faceCtx = face.getContext('2d');
+  const over = document.createElement('canvas');
+  over.width = HEAD;
+  over.height = HEAD;
+  const overCtx = over.getContext('2d');
+  let target = faceCtx;
+  let overDrawn = false;
 
   const PAL = {
     o: '#131a0c', g: '#57a63f', d: '#37702a', l: '#8fd457',
@@ -198,28 +173,34 @@ const Goblin = (() => {
   let lastPX = null;
   let lastPY = 0;
   let lastPT = 0;
-  let pxTarget = null;
-  let headOX = 0;
-  let headOY = 0;
-  let cellsW = 28;
-  let cellsH = 28;
-  let gDragging = false;
-  let geomPend = '';
-  let geomPendAt = 0;
+  let lastFrameT = 0;
 
-  // Stretch eases in continuously with speed: barely past 450 px/s it is
-  // near zero, 1.0 around 1450, capped ridiculous at 2.2 when flung hard.
-  function stretchF(sp) {
-    return Math.min(2.2, Math.pow(Math.max(0, sp - 450) / 1000, 1.2));
+  // Skin spring state: the lag vector chases the opposite of the window's
+  // velocity; squash pulses on sharp slowdowns and direction flips.
+  let lagX = 0, lagY = 0, lagVX = 0, lagVY = 0;
+  let sq = 0, sqV = 0;
+  let prevVX = 0, prevVY = 0;
+  let dirX = 0, dirY = 1;
+  const LAG_W = 11;
+  const LAG_Z = 0.4;
+  const SQ_W = 14;
+  const SQ_Z = 0.3;
+
+  // Stretch grows continuously with the lag magnitude: a hint past a slow
+  // drag, a full extra head-length around 1500 px/s, capped at 1.2 extra
+  // (about 2.2x total breadth) when flung hard.
+  function extension(sp) {
+    return Math.min(1.2, Math.pow(Math.max(0, sp - 100) / 1400, 1.25));
+  }
+
+  function smooth(a, b, v) {
+    const t = Math.min(1, Math.max(0, (v - a) / (b - a)));
+    return t * t * (3 - 2 * t);
   }
 
   function px(x, y, c) {
-    if (pxTarget) {
-      pxTarget.set(x + ',' + y, c);
-      return;
-    }
-    ctx.fillStyle = tonePal[c] || PAL[c];
-    ctx.fillRect((x + offX + headOX) * S, (y + headOY) * S, S, S);
+    target.fillStyle = tonePal[c] || PAL[c];
+    target.fillRect(x + offX, y, 1, 1);
   }
 
   function lerpHex(a, b, t) {
@@ -298,13 +279,13 @@ const Goblin = (() => {
       if (damage < lvl) continue;
       for (const [x, y, c] of BLOTCHES[lvl]) px(x, y + dy, c);
     }
-    if (damage >= 4 && !pxTarget) {
-      ctx.clearRect((1 + offX) * S, (5 + dy) * S, S, S);
-      ctx.clearRect((2 + offX) * S, (6 + dy) * S, S, S);
+    if (damage >= 4) {
+      faceCtx.clearRect(1 + offX, 5 + dy, 1, 1);
+      faceCtx.clearRect(2 + offX, 6 + dy, 1, 1);
     }
-    if (damage >= 6 && !pxTarget) {
-      ctx.clearRect((26 + offX) * S, (5 + dy) * S, S, S);
-      ctx.clearRect((25 + offX) * S, (6 + dy) * S, S, S);
+    if (damage >= 6) {
+      faceCtx.clearRect(26 + offX, 5 + dy, 1, 1);
+      faceCtx.clearRect(25 + offX, 6 + dy, 1, 1);
     }
   }
 
@@ -344,6 +325,7 @@ const Goblin = (() => {
 
   function drawEmote(now) {
     if (!emote) return;
+    overDrawn = true;
     for (let y = 1; y <= 7; y++) {
       for (let x = 21; x <= 27; x++) {
         const edge = y === 1 || y === 7 || x === 21 || x === 27;
@@ -372,9 +354,10 @@ const Goblin = (() => {
 
   function drawBadge() {
     if (!badge) return;
+    overDrawn = true;
     const text = String(Math.min(badge, 9));
-    ctx.fillStyle = PAL.m;
-    ctx.fillRect((21 + headOX) * S, (21 + headOY) * S, 5 * S, 7 * S);
+    overCtx.fillStyle = PAL.m;
+    overCtx.fillRect(21, 21, 5, 7);
     drawMap(DIGITS[text], 22, 22);
   }
 
@@ -414,147 +397,307 @@ const Goblin = (() => {
     drawMap(rows, MOUTH_X, m.y + dy);
   }
 
-  // Features come in one at a time as speed climbs, so no single frame
-  // swaps the whole face: cheeks, then wide eyes and a pursed mouth,
-  // then flapping lips once the stretch has real depth.
-  function drawSkin(now, dy) {
-    const sp = Math.hypot(gvx, gvy);
-    const f = stretchF(sp);
-    for (let y = 0; y < BASE.length; y++) {
-      for (let x = 0; x < BASE[y].length; x++) {
-        const c = BASE[y][x];
-        if (c !== '.') px(x, y + dy, c);
+  // Black sagging gaps trail each eye. Direction weights crossfade the
+  // side placement so a swung angle blends instead of snapping.
+  function drawGaps(dy, gA, deepA) {
+    const wH = dirX * dirX;
+    const wV = dirY * dirY;
+    for (const anchor of [EYE_L, EYE_R]) {
+      if (wH > 0.02) {
+        faceCtx.globalAlpha = gA * wH;
+        const gx = dirX < 0 ? anchor.x - 1 : anchor.x + 4;
+        for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'o');
+        if (deepA > 0.02) {
+          faceCtx.globalAlpha = gA * wH * deepA;
+          const gx2 = gx + (dirX < 0 ? -1 : 1);
+          for (let yy = 1; yy <= 3; yy++) px(gx2, anchor.y + yy + dy, 'o');
+        }
+      }
+      if (wV > 0.02) {
+        faceCtx.globalAlpha = gA * wV;
+        const gy = dirY < 0 ? anchor.y - 2 : anchor.y + 3;
+        const temple = anchor === EYE_L ? anchor.x - 1 : anchor.x + 4;
+        for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'o');
+        px(temple, gy + dy, 'o');
+        if (deepA > 0.02) {
+          faceCtx.globalAlpha = gA * wV * deepA;
+          px(anchor.x + 1, gy + (dirY < 0 ? -1 : 1) + dy, 'o');
+          px(anchor.x + 2, gy + (dirY < 0 ? -1 : 1) + dy, 'o');
+          px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'o');
+        }
       }
     }
-    for (const [x, y, c] of WARTS) px(x, y + dy, c);
-    drawMap(['..oo', '.oll', 'olll', '.oll', '..oo'], 3, 11 + dy);
-    drawMap(['oo..', 'llo.', 'lllo', 'llo.', 'oo..'], 21, 11 + dy);
-    if (sp > 280) {
-      for (const anchor of [EYE_L, EYE_R]) {
-        for (let yy = 0; yy < 4; yy++)
-          for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, anchor.y - 1 + yy + dy, 'e');
-        const pdx = Math.abs(gvx) < sp / 3 ? 1 : gvx > 0 ? 0 : 2;
-        px(anchor.x + pdx, anchor.y + 1 + dy, 'p');
-        px(anchor.x + pdx + 1, anchor.y + 1 + dy, 'p');
-      }
-    } else {
-      drawEye(EYE_L, dy, now);
-      drawEye(EYE_R, dy, now);
-    }
-    drawNose(dy);
-    if (f > 0.35) {
-      const flap = MOUTHS[Math.floor(now / 90) % 2 ? 2 : 3];
-      drawMap(flap.rows, MOUTH_X, flap.y + dy);
-    } else if (sp > 280) {
-      drawMap(['.oo.', 'ommo', '.oo.'], 12, 14 + dy);
-    } else {
-      drawMouth(dy);
-    }
-    drawBruises(dy);
-    drawBlood(dy);
-    drawDecay(dy);
+    faceCtx.globalAlpha = 1;
   }
 
-  // Cartoon G-force face. Tier 1: balloon cheeks, pursed mouth, wide eyes
-  // with trailing pupils. Tier 2 up: the skin is a sock gripped on the
-  // side leading the acceleration, the whole face stretching up to twice
-  // its breadth behind, rippling in the wind and fading out at the frame
-  // edge; the eyes stay visible with a black sagging gap on their
-  // trailing side. At damage 20 the bare skull stretches the same way.
-  function drawGForce(now, dy, gspeed, gtier) {
-    if (gtier === 1) {
-      drawSkin(now, dy);
-      return;
-    }
-    const f = stretchF(gspeed);
-    const ux = gvx / gspeed;
-    const uy = gvy / gspeed;
-    pxTarget = new Map();
+  // Every feature scales with the smoothed lag, so nothing pops at a
+  // speed threshold: cheeks balloon in first, then wide eyes and a pursed
+  // mouth, then flapping lips and the eye gaps as the stretch deepens.
+  function drawFace(now) {
+    faceCtx.clearRect(0, 0, HEAD, HEAD);
+    target = faceCtx;
+    const bobSpeed = state === 'talking' ? 260 : state === 'listening' ? 400 : 900;
+    const bob = Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
+    const dy = OY + bob;
     if (damage >= 20) {
-      drawSkullFace(dy, 0);
+      const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
+      drawSkullFace(dy, jaw);
       px(9, 13 + dy, 'r');
       px(9, 14 + dy, 'R');
       px(18, 13 + dy, 'r');
       px(11, 2 + dy, 'r');
       px(17, 3 + dy, 'R');
-    } else {
-      drawSkin(now, dy);
-      const bx = Math.round(-ux);
-      const by = Math.round(-uy);
-      if (f > 0.35) {
-        for (const anchor of [EYE_L, EYE_R]) {
-          if (bx) {
-            const gx = bx < 0 ? anchor.x - 1 : anchor.x + 4;
-            for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'o');
-            if (f > 0.9) {
-              for (let yy = 1; yy <= 3; yy++) px(gx + bx, anchor.y + yy + dy, 'o');
-            }
-          } else {
-            const gy = by < 0 ? anchor.y - 2 : anchor.y + 3;
-            const temple = anchor === EYE_L ? anchor.x - 1 : anchor.x + 4;
-            for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'o');
-            px(temple, gy + dy, 'o');
-            if (f > 0.9) {
-              px(anchor.x + 1, gy + by + dy, 'o');
-              px(anchor.x + 2, gy + by + dy, 'o');
-              px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'o');
-            }
-          }
-        }
+      return;
+    }
+
+    const sp = Math.hypot(lagX, lagY);
+    const E = extension(sp);
+    const earsUp = (state === 'listening' || now < twitchUntil) && damage < 10;
+    for (let y = 0; y < BASE.length; y++) {
+      for (let x = 0; x < BASE[y].length; x++) {
+        const c = BASE[y][x];
+        if (c === '.') continue;
+        const isEar = x <= 6 || x >= 21;
+        px(x, y + dy + (isEar && earsUp && y <= 10 ? -1 : 0), c);
       }
     }
-    const buf = pxTarget;
-    pxTarget = null;
-    let pMax = -Infinity;
-    let pMin = Infinity;
-    for (const key of buf.keys()) {
-      const [bx, by] = key.split(',').map(Number);
-      const p = bx * ux + by * uy;
-      if (p > pMax) pMax = p;
-      if (p < pMin) pMin = p;
+    for (const [x, y, c] of WARTS) px(x, y + dy, c);
+
+    const cheekA = smooth(130, 300, sp);
+    if (cheekA > 0.02) {
+      faceCtx.globalAlpha = cheekA;
+      drawMap(['..oo', '.oll', 'olll', '.oll', '..oo'], 3, 11 + dy);
+      drawMap(['oo..', 'llo.', 'lllo', 'llo.', 'oo..'], 21, 11 + dy);
+      faceCtx.globalAlpha = 1;
     }
-    const amp = Math.min(3, 2.5 * f);
-    const depth = pMax - pMin;
-    const span = depth * (1 + f);
-    const lin = f * 0.6;
-    const k = (f * 0.4) / (depth * depth);
-    const xLo = -headOX;
-    const xHi = cellsW - headOX;
-    const yLo = -headOY;
-    const yHi = cellsH - headOY;
-    for (let Y = yLo; Y < yHi; Y++) {
-      for (let X = xLo; X < xHi; X++) {
-        const p = X * ux + Y * uy;
-        const dd = pMax - p;
-        if (dd < 0 || dd > span) continue;
-        const q = dd / span;
-        const wave = amp * q * q * Math.sin(now / 70 - q * 4);
-        const off = -X * uy + Y * ux - wave;
-        let sB = dd / (1 + f);
-        for (let i = 0; i < 4; i++) {
-          sB -= (sB + lin * sB + k * sB * sB * sB - dd) / (1 + lin + 3 * k * sB * sB);
-        }
-        const ps = pMax - sB;
-        const xs = Math.round(ps * ux - off * uy);
-        const ys = Math.round(ps * uy + off * ux);
-        const c = buf.get(xs + ',' + ys);
-        if (!c) continue;
-        const dxe = ux > 0 ? (X - xLo) / ux : ux < 0 ? (X - xHi + 1) / ux : Infinity;
-        const dye = uy > 0 ? (Y - yLo) / uy : uy < 0 ? (Y - yHi + 1) / uy : Infinity;
-        const edgeDist = Math.min(dxe, dye);
-        ctx.globalAlpha = q > 0.25 ? Math.min(1, 0.15 + edgeDist / 5) : 1;
-        ctx.fillStyle = tonePal[c] || PAL[c];
-        ctx.fillRect((X + offX + headOX) * S, (Y + headOY) * S, S, S);
+
+    drawEye(EYE_L, dy, now);
+    drawEye(EYE_R, dy, now);
+    const wideA = smooth(220, 430, sp);
+    if (wideA > 0.02) {
+      faceCtx.globalAlpha = wideA;
+      for (const anchor of [EYE_L, EYE_R]) {
+        for (let yy = 0; yy < 4; yy++)
+          for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, anchor.y - 1 + yy + dy, 'e');
+        const pdx = Math.abs(lagX) < sp / 3 ? 1 : lagX < 0 ? 0 : 2;
+        px(anchor.x + pdx, anchor.y + 1 + dy, 'p');
+        px(anchor.x + pdx + 1, anchor.y + 1 + dy, 'p');
+      }
+      faceCtx.globalAlpha = 1;
+    }
+    if (wideA < 0.98) {
+      faceCtx.globalAlpha = 1 - wideA;
+      drawBrows(dy);
+      faceCtx.globalAlpha = 1;
+    }
+    drawNose(dy);
+
+    const flapA = smooth(0.26, 0.48, E);
+    if (wideA < 0.98) {
+      faceCtx.globalAlpha = 1 - wideA;
+      drawMouth(dy);
+      faceCtx.globalAlpha = 1;
+    }
+    if (wideA > 0.02 && flapA < 0.98) {
+      faceCtx.globalAlpha = wideA * (1 - flapA);
+      drawMap(['.oo.', 'ommo', '.oo.'], 12, 14 + dy);
+      faceCtx.globalAlpha = 1;
+    }
+    if (flapA > 0.02) {
+      const flap = MOUTHS[Math.floor(now / 90) % 2 ? 2 : 3];
+      faceCtx.globalAlpha = flapA;
+      drawMap(flap.rows, MOUTH_X, flap.y + dy);
+      faceCtx.globalAlpha = 1;
+    }
+
+    drawBruises(dy);
+    drawBlood(dy);
+    drawDecay(dy);
+
+    const gapA = smooth(0.16, 0.36, E);
+    if (gapA > 0.02) drawGaps(dy, gapA, smooth(0.7, 1.0, E));
+  }
+
+  function drawOverlay(now) {
+    overCtx.clearRect(0, 0, HEAD, HEAD);
+    overDrawn = false;
+    target = overCtx;
+    drawEmote(now);
+    drawBadge();
+    target = faceCtx;
+  }
+
+  // WebGL: one quad per sprite cell, positions computed per frame in JS,
+  // nearest-neighbor sampling keeps the pixel art crisp.
+  let gl = null;
+  let glLost = false;
+  let posBuf = null;
+  let faceTex = null;
+  let overTex = null;
+  const VN = HEAD + 1;
+  const verts = new Float32Array(VN * VN * 2);
+  const ident = new Float32Array(VN * VN * 2);
+  const uvArr = new Float32Array(VN * VN * 2);
+  const idxArr = new Uint16Array(HEAD * HEAD * 6);
+  for (let j = 0; j < VN; j++) {
+    for (let i = 0; i < VN; i++) {
+      const n = j * VN + i;
+      ident[n * 2] = PAD + i;
+      ident[n * 2 + 1] = PAD + j;
+      uvArr[n * 2] = i / HEAD;
+      uvArr[n * 2 + 1] = j / HEAD;
+    }
+  }
+  {
+    let k = 0;
+    for (let j = 0; j < HEAD; j++) {
+      for (let i = 0; i < HEAD; i++) {
+        const a = j * VN + i;
+        idxArr[k++] = a; idxArr[k++] = a + 1; idxArr[k++] = a + VN;
+        idxArr[k++] = a + 1; idxArr[k++] = a + VN + 1; idxArr[k++] = a + VN;
       }
     }
-    ctx.globalAlpha = 1;
+  }
+
+  function makeTex() {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+
+  function initGL() {
+    gl = canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: true });
+    if (!gl) {
+      console.error('goblin: webgl unavailable, nothing will render');
+      return;
+    }
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, 'attribute vec2 aPos; attribute vec2 aUV; varying vec2 vUV;'
+      + 'void main() { vUV = aUV; gl_Position = vec4(aPos.x / ' + (GRID / 2)
+      + '.0 - 1.0, 1.0 - aPos.y / ' + (GRID / 2) + '.0, 0.0, 1.0); }');
+    gl.compileShader(vs);
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, 'precision mediump float; varying vec2 vUV; uniform sampler2D uTex;'
+      + 'void main() { gl_FragColor = texture2D(uTex, vUV); }');
+    gl.compileShader(fs);
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+    posBuf = gl.createBuffer();
+    const uvBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, uvArr, gl.STATIC_DRAW);
+    const aUV = gl.getAttribLocation(prog, 'aUV');
+    gl.enableVertexAttribArray(aUV);
+    gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 0, 0);
+    const idxBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxArr, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    const aPos = gl.getAttribLocation(prog, 'aPos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    faceTex = makeTex();
+    overTex = makeTex();
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.clearColor(0, 0, 0, 0);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+
+  function glDraw() {
+    if (!gl || glLost) return;
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
+    gl.bindTexture(gl.TEXTURE_2D, faceTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, face);
+    gl.drawElements(gl.TRIANGLES, idxArr.length, gl.UNSIGNED_SHORT, 0);
+    if (!overDrawn) return;
+    gl.bufferData(gl.ARRAY_BUFFER, ident, gl.DYNAMIC_DRAW);
+    gl.bindTexture(gl.TEXTURE_2D, overTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, over);
+    gl.drawElements(gl.TRIANGLES, idxArr.length, gl.UNSIGNED_SHORT, 0);
+  }
+
+  function stepSkin(dt) {
+    lagVX += ((-gvx - lagX) * LAG_W * LAG_W - 2 * LAG_Z * LAG_W * lagVX) * dt;
+    lagVY += ((-gvy - lagY) * LAG_W * LAG_W - 2 * LAG_Z * LAG_W * lagVY) * dt;
+    lagX += lagVX * dt;
+    lagY += lagVY * dt;
+    const pv = Math.hypot(prevVX, prevVY);
+    if (pv > 500) {
+      const brake = (prevVX * (prevVX - gvx) + prevVY * (prevVY - gvy)) / pv;
+      if (brake > pv * 0.06) sqV += Math.min(6, brake / 250);
+    }
+    sqV += (-sq * SQ_W * SQ_W - 2 * SQ_Z * SQ_W * sqV) * dt;
+    sq += sqV * dt;
+    sq = Math.max(-0.5, Math.min(0.85, sq));
+    prevVX = gvx;
+    prevVY = gvy;
+    const sp = Math.hypot(lagX, lagY);
+    if (sp > 40) {
+      dirX = lagX / sp;
+      dirY = lagY / sp;
+    }
+  }
+
+  // Sock deformation: the side leading the acceleration stays gripped,
+  // the trailing side lags on a 60/40 linear-cubic profile, rippling and
+  // thinning toward the tip. When the tail outgrows the pad the whole
+  // sock advances a little instead of clipping.
+  function deform(now) {
+    const sp = Math.hypot(lagX, lagY);
+    const E = extension(sp);
+    if (E < 0.01 && Math.abs(sq) < 0.01) {
+      verts.set(ident);
+      return;
+    }
+    const ux = dirX;
+    const uy = dirY;
+    const c = PAD + HEAD / 2;
+    const adv = Math.max(0, E * HEAD - (PAD - 2));
+    const amp = Math.min(2.5, 2.2 * E);
+    const axS = 1 - 0.35 * sq;
+    const offS = 1 + 0.3 * sq;
+    for (let n = 0; n < VN * VN; n++) {
+      const bx = ident[n * 2] - c;
+      const by = ident[n * 2 + 1] - c;
+      const p = -(bx * ux + by * uy);
+      const o = bx * uy - by * ux;
+      const a = Math.min(1, Math.max(0, (14 - p) / HEAD));
+      const ease = a * (0.6 + 0.4 * a * a);
+      const disp = E * HEAD * ease - adv;
+      const wave = amp * a * a * Math.sin(now / 70 - a * 5);
+      const p2 = p * axS - disp;
+      const o2 = (o + wave) * offS * (1 - 0.18 * E * a * a);
+      const wx = c - ux * p2 + uy * o2;
+      const wy = c - uy * p2 - ux * o2;
+      verts[n * 2] = Math.min(GRID - 0.5, Math.max(0.5, wx));
+      verts[n * 2 + 1] = Math.min(GRID - 0.5, Math.max(0.5, wy));
+    }
+  }
+
+  function setScale(n) {
+    S = n;
+    canvas.width = GRID * S;
+    canvas.height = GRID * S;
+    if (gl) gl.viewport(0, 0, canvas.width, canvas.height);
   }
 
   function render(now) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const dt = Math.min(0.05, Math.max(0.001, (now - lastFrameT) / 1000));
+    lastFrameT = now;
 
-    // Window velocity from the window's own screen position, smoothed,
-    // feeds the G-force face; setMotion overrides it for test pages.
+    // Window velocity from the window's own screen position, smoothed;
+    // setMotion overrides it for test pages.
     if (!gvManual) {
       if (lastPX === null) {
         lastPX = window.screenX;
@@ -579,80 +722,11 @@ const Goblin = (() => {
 
     shownLevel = Math.max(level, shownLevel * 0.75);
 
-    const bobSpeed = state === 'talking' ? 260 : state === 'listening' ? 400 : 900;
-    const bob = Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
-    const earsUp = (state === 'listening' || now < twitchUntil) && damage < 10;
-
-    const gspeed = Math.hypot(gvx, gvy);
-    const gtier = gspeed > 450 ? 2 : gspeed > 150 ? 1 : 0;
-    if (damage >= 20 && gtier < 2) {
-      const dy = OY + bob;
-      const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
-      applyGeometry(0, 0, 28, 28);
-      drawSkullFace(dy, jaw);
-      px(9, 13 + dy, 'r');
-      px(9, 14 + dy, 'R');
-      px(18, 13 + dy, 'r');
-      px(11, 2 + dy, 'r');
-      px(17, 3 + dy, 'R');
-      drawEmote(now);
-      drawBadge();
-      requestAnimationFrame(render);
-      return;
-    }
-
-    if (gtier >= 2 && gDragging && gspeed > 0) {
-      // Tail room is capped to the space between the head and the screen
-      // edge: a window edge past the wall would clamp in drift and fire
-      // phantom hurts. Sized to the tail, quantized to 14-cell steps.
-      const tbx = Math.round(-gvx / gspeed);
-      const tby = Math.round(-gvy / gspeed);
-      const want = Math.min(56, Math.ceil((28 * stretchF(gspeed)) / 14) * 14);
-      const scr = window.screen;
-      const headSX = window.screenX + headOX * S;
-      const headSY = window.screenY + headOY * S;
-      let gw = 0;
-      let gh = 0;
-      if (tbx < 0) gw = (headSX - scr.availLeft) / S;
-      else if (tbx > 0) gw = (scr.availLeft + scr.availWidth - headSX - 28 * S) / S;
-      if (tby < 0) gh = (headSY - scr.availTop) / S;
-      else if (tby > 0) gh = (scr.availTop + scr.availHeight - headSY - 28 * S) / S;
-      gw = Math.min(want, Math.floor(Math.max(0, Math.min(56, gw)) / 14) * 14);
-      gh = Math.min(want, Math.floor(Math.max(0, Math.min(56, gh)) / 14) * 14);
-      requestGeometry(tbx < 0 ? gw : 0, tby < 0 ? gh : 0, 28 + gw, 28 + gh, now);
-    } else {
-      requestGeometry(0, 0, 28, 28, now);
-    }
-    if (gtier > 0) {
-      drawGForce(now, OY + bob, gspeed, gtier);
-      drawEmote(now);
-      drawBadge();
-      requestAnimationFrame(render);
-      return;
-    }
-
-    for (let y = 0; y < BASE.length; y++) {
-      for (let x = 0; x < BASE[y].length; x++) {
-        const c = BASE[y][x];
-        if (c === '.') continue;
-        const isEar = x <= 6 || x >= 21;
-        const dy = OY + bob + (isEar && earsUp && y <= 10 ? -1 : 0);
-        px(x, y + dy, c);
-      }
-    }
-
-    const dy = OY + bob;
-    for (const [x, y, c] of WARTS) px(x, y + dy, c);
-    drawEye(EYE_L, dy, now);
-    drawEye(EYE_R, dy, now);
-    drawBrows(dy);
-    drawNose(dy);
-    drawMouth(dy);
-    drawBruises(dy);
-    drawBlood(dy);
-    drawDecay(dy);
-    drawEmote(now);
-    drawBadge();
+    stepSkin(dt);
+    drawFace(now);
+    drawOverlay(now);
+    deform(now);
+    glDraw();
 
     requestAnimationFrame(render);
   }
@@ -660,14 +734,10 @@ const Goblin = (() => {
   return {
     setScale,
     start: () => {
+      initGL();
       setScale(S);
-      canvas.addEventListener('mousedown', (e) => {
-        if (e.button === 0) gDragging = true;
-      });
-      window.addEventListener('mouseup', () => {
-        gDragging = false;
-        applyGeometry(0, 0, 28, 28);
-      });
+      canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); glLost = true; });
+      canvas.addEventListener('webglcontextrestored', () => { glLost = false; initGL(); });
       requestAnimationFrame(render);
     },
     setState: (s) => { state = s; },
