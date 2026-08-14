@@ -198,9 +198,25 @@ const Goblin = (() => {
       pxTarget.set(x + ',' + y, c);
       return;
     }
-    ctx.fillStyle = damage >= 8 && PALE[c] ? PALE[c] : PAL[c];
+    ctx.fillStyle = tonePal[c] || PAL[c];
     ctx.fillRect((x + offX + headOX) * S, (y + headOY) * S, S, S);
   }
+
+  function lerpHex(a, b, t) {
+    const A = parseInt(a.slice(1), 16);
+    const B = parseInt(b.slice(1), 16);
+    const ch = (sh) => Math.round(((A >> sh) & 255) + (((B >> sh) & 255) - ((A >> sh) & 255)) * t);
+    return 'rgb(' + ch(16) + ',' + ch(8) + ',' + ch(0) + ')';
+  }
+
+  // Skin tone walks toward corpse gray a step per damage stage.
+  let tonePal = {};
+  function rebuildTones() {
+    const t = Math.min(1, damage / 14);
+    tonePal = {};
+    for (const k in PALE) tonePal[k] = lerpHex(PAL[k], PALE[k], t);
+  }
+  rebuildTones();
 
   function drawMap(rows, ox, oy) {
     for (let y = 0; y < rows.length; y++) {
@@ -397,13 +413,15 @@ const Goblin = (() => {
     }
     drawBruises(dy);
     drawBlood(dy);
+    drawDecay(dy);
   }
 
   // Cartoon G-force face. Tier 1: balloon cheeks, pursed mouth, wide eyes
   // with trailing pupils. Tier 2 up: the skin is a sock gripped on the
-  // side leading the acceleration, stretched up to twice its breadth
-  // behind, rippling in the wind and fading out at the frame edge; the
-  // eyes stay visible with a black sagging gap on their trailing side.
+  // side leading the acceleration, the whole face stretching up to twice
+  // its breadth behind, rippling in the wind and fading out at the frame
+  // edge; the eyes stay visible with a black sagging gap on their
+  // trailing side. At damage 20 the bare skull stretches the same way.
   function drawGForce(now, dy, gspeed, gtier) {
     if (gtier === 1) {
       drawSkin(now, dy, 1);
@@ -412,25 +430,34 @@ const Goblin = (() => {
     const ux = gvx / gspeed;
     const uy = gvy / gspeed;
     pxTarget = new Map();
-    drawSkin(now, dy, gtier);
-    const bx = Math.round(-ux);
-    const by = Math.round(-uy);
-    for (const anchor of [EYE_L, EYE_R]) {
-      if (bx) {
-        const gx = bx < 0 ? anchor.x - 1 : anchor.x + 4;
-        for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'o');
-        if (gtier === 3) {
-          for (let yy = 1; yy <= 3; yy++) px(gx + bx, anchor.y + yy + dy, 'o');
-        }
-      } else {
-        const gy = by < 0 ? anchor.y - 2 : anchor.y + 3;
-        const temple = anchor === EYE_L ? anchor.x - 1 : anchor.x + 4;
-        for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'o');
-        px(temple, gy + dy, 'o');
-        if (gtier === 3) {
-          px(anchor.x + 1, gy + by + dy, 'o');
-          px(anchor.x + 2, gy + by + dy, 'o');
-          px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'o');
+    if (damage >= 20) {
+      drawSkullFace(dy, 0);
+      px(9, 13 + dy, 'r');
+      px(9, 14 + dy, 'R');
+      px(18, 13 + dy, 'r');
+      px(11, 2 + dy, 'r');
+      px(17, 3 + dy, 'R');
+    } else {
+      drawSkin(now, dy, gtier);
+      const bx = Math.round(-ux);
+      const by = Math.round(-uy);
+      for (const anchor of [EYE_L, EYE_R]) {
+        if (bx) {
+          const gx = bx < 0 ? anchor.x - 1 : anchor.x + 4;
+          for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'o');
+          if (gtier === 3) {
+            for (let yy = 1; yy <= 3; yy++) px(gx + bx, anchor.y + yy + dy, 'o');
+          }
+        } else {
+          const gy = by < 0 ? anchor.y - 2 : anchor.y + 3;
+          const temple = anchor === EYE_L ? anchor.x - 1 : anchor.x + 4;
+          for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'o');
+          px(temple, gy + dy, 'o');
+          if (gtier === 3) {
+            px(anchor.x + 1, gy + by + dy, 'o');
+            px(anchor.x + 2, gy + by + dy, 'o');
+            px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'o');
+          }
         }
       }
     }
@@ -448,7 +475,8 @@ const Goblin = (() => {
     const amp = gtier === 3 ? 2.5 : 1;
     const depth = pMax - pMin;
     const span = depth * (1 + f);
-    const k = f / (depth * depth);
+    const lin = f * 0.6;
+    const k = (f * 0.4) / (depth * depth);
     const xLo = -headOX;
     const xHi = cellsW - headOX;
     const yLo = -headOY;
@@ -461,8 +489,10 @@ const Goblin = (() => {
         const q = dd / span;
         const wave = amp * q * q * Math.sin(now / 70 - q * 4);
         const off = -X * uy + Y * ux - wave;
-        let sB = dd;
-        for (let i = 0; i < 4; i++) sB -= (sB + k * sB * sB * sB - dd) / (1 + 3 * k * sB * sB);
+        let sB = dd / (1 + f);
+        for (let i = 0; i < 4; i++) {
+          sB -= (sB + lin * sB + k * sB * sB * sB - dd) / (1 + lin + 3 * k * sB * sB);
+        }
         const ps = pMax - sB;
         const xs = Math.round(ps * ux - off * uy);
         const ys = Math.round(ps * uy + off * ux);
@@ -472,7 +502,7 @@ const Goblin = (() => {
         const dye = uy > 0 ? (Y - yLo) / uy : uy < 0 ? (Y - yHi + 1) / uy : Infinity;
         const edgeDist = Math.min(dxe, dye);
         ctx.globalAlpha = q > 0.25 ? Math.min(1, 0.15 + edgeDist / 5) : 1;
-        ctx.fillStyle = damage >= 8 && PALE[c] ? PALE[c] : PAL[c];
+        ctx.fillStyle = tonePal[c] || PAL[c];
         ctx.fillRect((X + offX + headOX) * S, (Y + headOY) * S, S, S);
       }
     }
@@ -503,7 +533,7 @@ const Goblin = (() => {
     if (now > nextBlink) { blinkUntil = now + 140; nextBlink = now + 2200 + Math.random() * 3800; }
     if (now > nextTwitch) { twitchUntil = now + 160; nextTwitch = now + 3500 + Math.random() * 5000; }
     if (now > nextLook) { look = Math.floor(Math.random() * 3); nextLook = now + 1500 + Math.random() * 3000; }
-    if (damage > 0 && now - lastHeal > healMs) { damage--; lastHeal = now; }
+    if (damage > 0 && now - lastHeal > healMs) { damage--; lastHeal = now; rebuildTones(); }
     offX = now < shakeUntil ? (Math.random() < 0.5 ? -1 : 1) : 0;
 
     shownLevel = Math.max(level, shownLevel * 0.75);
@@ -512,9 +542,12 @@ const Goblin = (() => {
     const bob = Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
     const earsUp = (state === 'listening' || now < twitchUntil) && damage < 10;
 
-    if (damage >= 20) {
+    const gspeed = Math.hypot(gvx, gvy);
+    const gtier = gspeed > 900 ? 3 : gspeed > 450 ? 2 : gspeed > 150 ? 1 : 0;
+    if (damage >= 20 && gtier < 2) {
       const dy = OY + bob;
       const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
+      applyGeometry(0, 0, 28, 28);
       drawSkullFace(dy, jaw);
       px(9, 13 + dy, 'r');
       px(9, 14 + dy, 'R');
@@ -527,8 +560,6 @@ const Goblin = (() => {
       return;
     }
 
-    const gspeed = Math.hypot(gvx, gvy);
-    const gtier = damage >= 10 ? 0 : gspeed > 900 ? 3 : gspeed > 450 ? 2 : gspeed > 150 ? 1 : 0;
     if (gtier >= 2 && gDragging && gspeed > 0) {
       // Tail room is capped to the space between the head and the screen
       // edge: a window edge past the wall would clamp in drift and fire
@@ -626,6 +657,7 @@ const Goblin = (() => {
       const grew = n > damage;
       damage = Math.max(0, Math.min(20, n));
       lastHeal = performance.now();
+      rebuildTones();
       if (grew) shakeUntil = performance.now() + 350;
     },
   };
