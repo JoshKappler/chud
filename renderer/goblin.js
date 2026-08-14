@@ -28,7 +28,7 @@ const Goblin = (() => {
     o: '#131a0c', g: '#57a63f', d: '#37702a', l: '#8fd457',
     e: '#ffd83d', p: '#1b140d', w: '#f5efd7', m: '#33121a',
     t: '#b33a3a', n: '#274d1e', b: '#5b3b6e', B: '#2e1d3f',
-    r: '#a11f2f', R: '#6e1420',
+    r: '#b00e22', R: '#7c0817', W: '#cfc6aa',
   };
 
   const BASE = [
@@ -84,34 +84,54 @@ const Goblin = (() => {
   let skullMap = null;
   let decayMap = null;
 
-  function buildDecayMaps() {
+  // One skull map drives both the stage-20 face and the decay reveal:
+  // brow ridge, temple hollows, cheekbones and gum line in shaded bone,
+  // a forked crack across the crown, a triangular nasal aperture, and a
+  // gap-toothed grin with one tooth knocked out.
+  function buildSkull() {
     skullMap = new Map();
+    const put = (x, y, c) => skullMap.set(x + ',' + y, c);
     for (let y = 0; y < BASE.length; y++) {
       for (let x = 0; x < BASE[y].length; x++) {
         const c = BASE[y][x];
-        if (c !== '.') skullMap.set(x + ',' + y, c === 'o' ? 'o' : 'w');
+        if (c !== '.') put(x, y, c === 'o' ? 'o' : 'w');
       }
     }
+    for (let xx = 8; xx <= 12; xx++) put(xx, 8, 'W');
+    for (let xx = 15; xx <= 19; xx++) put(xx, 8, 'W');
+    const SHADES = [[8, 7], [7, 8], [19, 7], [20, 8], [7, 11], [8, 12],
+      [20, 11], [19, 12], [8, 14], [19, 14], [13, 18], [14, 18]];
+    for (const [x, y] of SHADES) put(x, y, 'W');
     for (let yy = 0; yy < 4; yy++) {
       for (let xx = 0; xx < 4; xx++) {
-        skullMap.set((9 + xx) + ',' + (9 + yy), 'p');
-        skullMap.set((15 + xx) + ',' + (9 + yy), 'p');
+        put(9 + xx, 9 + yy, 'p');
+        put(15 + xx, 9 + yy, 'p');
       }
     }
-    skullMap.set('10,10', 'e');
-    skullMap.set('17,10', 'e');
-    skullMap.set('13,13', 'p');
-    skullMap.set('14,13', 'p');
-    skullMap.set('13,14', 'p');
-    skullMap.set('14,14', 'p');
-    for (let xx = 10; xx <= 17; xx++) {
-      skullMap.set(xx + ',15', 'w');
-      skullMap.set(xx + ',16', xx % 2 ? 'o' : 'w');
+    put(10, 10, 'e');
+    put(17, 10, 'e');
+    for (let xx = 9; xx <= 12; xx++) put(xx, 13, 'W');
+    for (let xx = 15; xx <= 18; xx++) put(xx, 13, 'W');
+    put(13, 11, 'p');
+    put(13, 12, 'p');
+    put(14, 12, 'p');
+    for (const xx of [12, 13, 14, 15]) put(xx, 13, 'p');
+    put(13, 14, 'p');
+    put(14, 14, 'p');
+    for (const xx of [10, 11, 12, 15, 16, 17]) put(xx, 14, 'W');
+    for (let xx = 9; xx <= 18; xx++) {
+      put(xx, 15, 'w');
+      put(xx, 16, xx % 2 ? 'o' : 'w');
     }
-    skullMap.set('12,3', 'o');
-    skullMap.set('13,4', 'o');
-    skullMap.set('16,6', 'o');
+    for (const xx of [11, 14, 17]) put(xx, 15, 'o');
+    put(12, 15, 'p');
+    put(12, 16, 'p');
+    const CRACK = [[12, 2], [12, 3], [13, 4], [13, 5], [14, 6], [16, 5], [16, 6], [17, 7]];
+    for (const [x, y] of CRACK) put(x, y, 'o');
+  }
 
+  function buildDecayMaps() {
+    if (!skullMap) buildSkull();
     decayMap = new Map();
     const ranked = [];
     for (const key of skullMap.keys()) {
@@ -184,6 +204,17 @@ const Goblin = (() => {
   let flutter = 0;
   let dirX = 0, dirY = 1;
   let impactUntil = 0;
+
+  // Damage 15+: the eyes hang out of their sockets on optic threads,
+  // each a damped pendulum blown around by the same skin lag; different
+  // frequencies keep the two from swinging in sync.
+  const pendL = { th: 0.4, w: 0 };
+  const pendR = { th: -0.3, w: 0 };
+  function stepPend(p, dt, wf) {
+    const targ = Math.atan2(lagX * 0.008, 22 + lagY * 0.008);
+    p.w += (-wf * wf * Math.sin(p.th - targ) - 1.7 * p.w) * dt;
+    p.th += p.w * dt;
+  }
 
   // Stretch grows continuously with the lag magnitude: a hint past a slow
   // drag, a full extra head-length around 1500 px/s, capped at 1.2 extra
@@ -361,32 +392,11 @@ const Goblin = (() => {
   }
 
   function drawSkullFace(dy, jaw) {
-    for (let y = 0; y < BASE.length; y++) {
-      for (let x = 0; x < BASE[y].length; x++) {
-        const c = BASE[y][x];
-        if (c === '.') continue;
-        px(x, y + dy + (y >= 15 ? jaw : 0), c === 'o' ? 'o' : 'w');
-      }
+    if (!skullMap) buildSkull();
+    for (const [key, c] of skullMap) {
+      const [x, y] = key.split(',').map(Number);
+      px(x, y + dy + (y >= 15 ? jaw : 0), c);
     }
-    for (let yy = 0; yy < 4; yy++) {
-      for (let xx = 0; xx < 4; xx++) {
-        px(9 + xx, 9 + yy + dy, 'p');
-        px(15 + xx, 9 + yy + dy, 'p');
-      }
-    }
-    px(10, 10 + dy, 'e');
-    px(17, 10 + dy, 'e');
-    px(13, 13 + dy, 'p');
-    px(14, 13 + dy, 'p');
-    px(13, 14 + dy, 'p');
-    px(14, 14 + dy, 'p');
-    for (let xx = 10; xx <= 17; xx++) {
-      px(xx, 15 + dy + jaw, 'w');
-      px(xx, 16 + dy + jaw, xx % 2 ? 'o' : 'w');
-    }
-    px(12, 3 + dy, 'o');
-    px(13, 4 + dy, 'o');
-    px(16, 6 + dy, 'o');
   }
 
   function drawMouth(dy) {
@@ -427,6 +437,28 @@ const Goblin = (() => {
       }
     }
     faceCtx.globalAlpha = 1;
+  }
+
+  function drawDanglingEyes(dy) {
+    for (const [anchor, p] of [[EYE_L, pendL], [EYE_R, pendR]]) {
+      for (let yy = 0; yy < 3; yy++)
+        for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, anchor.y + yy + dy, 'p');
+      px(anchor.x, anchor.y + 3 + dy, 'R');
+      px(anchor.x + 3, anchor.y + 3 + dy, 'R');
+      const pivX = anchor.x + 1.5;
+      const pivY = anchor.y + 1 + dy;
+      const ex = pivX + Math.sin(p.th) * 4.5;
+      const ey = pivY + Math.cos(p.th) * 4.5;
+      for (let i = 1; i <= 4; i++) {
+        px(Math.round(pivX + (ex - pivX) * (i / 4)), Math.round(pivY + (ey - pivY) * (i / 4)), 'R');
+      }
+      const bx = Math.round(ex - 1);
+      const by = Math.round(ey);
+      for (let yy = 0; yy < 3; yy++)
+        for (let xx = 0; xx < 3; xx++) px(bx + xx, by + yy, 'e');
+      const pdx = p.th > 0.25 ? 2 : p.th < -0.25 ? 0 : 1;
+      px(bx + pdx, by + 2, 'p');
+    }
   }
 
   // Every feature scales with the smoothed lag, so nothing pops at a
@@ -470,9 +502,12 @@ const Goblin = (() => {
       faceCtx.globalAlpha = 1;
     }
 
-    drawEye(EYE_L, dy, now);
-    drawEye(EYE_R, dy, now);
-    const wideA = smooth(220, 430, sp);
+    const dangling = damage >= 15;
+    if (!dangling) {
+      drawEye(EYE_L, dy, now);
+      drawEye(EYE_R, dy, now);
+    }
+    const wideA = dangling ? 0 : smooth(220, 430, sp);
     if (wideA > 0.02) {
       faceCtx.globalAlpha = wideA;
       for (const anchor of [EYE_L, EYE_R]) {
@@ -514,7 +549,8 @@ const Goblin = (() => {
     drawDecay(dy);
 
     const gapA = smooth(0.16, 0.36, E);
-    if (gapA > 0.02) drawGaps(dy, gapA, smooth(0.7, 1.0, E));
+    if (gapA > 0.02 && !dangling) drawGaps(dy, gapA, smooth(0.7, 1.0, E));
+    if (dangling) drawDanglingEyes(dy);
   }
 
   function drawOverlay(now) {
@@ -710,6 +746,10 @@ const Goblin = (() => {
     flutter = sk.flutter;
     dirX = sk.dirX;
     dirY = sk.dirY;
+    if (damage >= 15 && damage < 20) {
+      stepPend(pendL, dt, 7.5);
+      stepPend(pendR, dt, 8.7);
+    }
     drawFace(now);
     drawOverlay(now);
     deform(now);

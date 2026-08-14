@@ -49,6 +49,7 @@ function createWindow() {
     resizable: false,
     hasShadow: false,
     alwaysOnTop: true,
+    enableLargerThanScreen: true,
     webPreferences: { preload: path.join(ROOT, 'preload.js') },
   });
   win.setAlwaysOnTop(true, 'floating');
@@ -117,6 +118,7 @@ app.whenReady().then(async () => {
   });
 
   createWindow();
+  if (!SCREENSHOT) splat.init();
 });
 
 app.on('window-all-closed', () => app.quit());

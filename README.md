@@ -59,16 +59,17 @@ window and every Space.
   mouse.
 - Right click to punch him. Hard wall bounces and held drag-bashes into a
   monitor edge hurt too. Twenty damage stages: bruises, cuts and blood
-  through stage 9, then the skin falls away patch by patch from stage 10,
-  revealing more skull with every hit until only his skull is left at 20.
-  Each hit plays a wet crunch and a preset guttural scream, four takes per
-  severity band, never the same one twice in a row (assets/grunts,
-  regenerate with scripts/make-grunts.js), instant and offline, and
-  splats blood and a few bone shards: behind him for a punch, sprayed and
-  smeared on the monitor edge for an impact, fading out after a few
-  seconds. He
-  heals one stage every `healSeconds` (default 2). Alt + right click for
-  the menu.
+  through stage 9, the skin falls away patch by patch from stage 10, his
+  eyes pop from their sockets at 15 and swing on their optic threads
+  until only his skull is left at 20, cracked crown, gap teeth and empty
+  sockets. Each hit plays a wet crunch and a preset guttural scream, four
+  takes per severity band, never the same one twice in a row
+  (assets/grunts, regenerate with scripts/make-grunts.js), instant and
+  offline, and splats scarlet blood, bone chips and skin flakes: behind
+  him for a punch, sprayed and smeared on the monitor edge for an impact,
+  each smear fading on its own clock with no cap on how many pile up (a
+  persistent click-through overlay per display holds them). He heals one
+  stage every `healSeconds` (default 2). Alt + right click for the menu.
 - The session closes itself after `idleSeconds` with no voice (default 10).
 - The badge counts agent results that arrived while disconnected; he reports
   them next time you talk.
