@@ -352,18 +352,11 @@ const Goblin = (() => {
     drawMap(['..oo', '.oll', 'olll', '.oll', '..oo'], 3, 11 + dy);
     drawMap(['oo..', 'llo.', 'lllo', 'llo.', 'oo..'], 21, 11 + dy);
     for (const anchor of [EYE_L, EYE_R]) {
-      if (gtier === 1) {
-        for (let yy = 0; yy < 4; yy++)
-          for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, anchor.y - 1 + yy + dy, 'e');
-        const pdx = Math.abs(gvx) < Math.hypot(gvx, gvy) / 3 ? 1 : gvx > 0 ? 0 : 2;
-        px(anchor.x + pdx, anchor.y + 1 + dy, 'p');
-        px(anchor.x + pdx + 1, anchor.y + 1 + dy, 'p');
-      } else {
-        for (let xx = 0; xx < 4; xx++) {
-          px(anchor.x + xx, anchor.y + dy, 'e');
-          px(anchor.x + xx, anchor.y + 1 + dy, 'p');
-        }
-      }
+      for (let yy = 0; yy < 4; yy++)
+        for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, anchor.y - 1 + yy + dy, 'e');
+      const pdx = Math.abs(gvx) < Math.hypot(gvx, gvy) / 3 ? 1 : gvx > 0 ? 0 : 2;
+      px(anchor.x + pdx, anchor.y + 1 + dy, 'p');
+      px(anchor.x + pdx + 1, anchor.y + 1 + dy, 'p');
     }
     drawNose(dy);
     if (gtier === 1) {
@@ -376,10 +369,12 @@ const Goblin = (() => {
     drawBlood(dy);
   }
 
-  // Cartoon G-force face. Tier 1: balloon cheeks, pursed mouth, trailing
-  // pupils. Tier 2 up: the skin is one continuous sheet gripped on the
-  // side leading the acceleration and stretched flat toward the back; a
-  // few bone flecks painted trailing each eye stand in for the skull.
+  // Cartoon G-force face. Tier 1: balloon cheeks, pursed mouth, wide eyes
+  // with trailing pupils. Tier 2 up: the skin is one continuous sheet
+  // gripped on the side leading the acceleration and stretched flat
+  // toward the back; the eyes stay visible, and beside each one, on the
+  // trailing side, the skin sags away in a bone-colored crescent that
+  // droops below the eye line.
   function drawGForce(now, dy, gspeed, gtier) {
     if (gtier === 1) {
       drawSkin(now, dy, 1);
@@ -392,15 +387,21 @@ const Goblin = (() => {
     const bx = Math.round(-ux);
     const by = Math.round(-uy);
     for (const anchor of [EYE_L, EYE_R]) {
-      for (let yy = 0; yy < 2; yy++) {
-        for (let xx = 0; xx < 4; xx++) {
-          for (let d = 1; d <= (gtier === 3 ? 2 : 1); d++) {
-            const tx = anchor.x + xx + bx * d;
-            const ty = anchor.y + yy + dy + by * d;
-            const inEye = tx >= anchor.x && tx < anchor.x + 4
-              && ty >= anchor.y + dy && ty < anchor.y + dy + 2;
-            if (!inEye) px(tx, ty, 'w');
-          }
+      if (bx) {
+        const gx = bx < 0 ? anchor.x - 1 : anchor.x + 4;
+        for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'w');
+        if (gtier === 3) {
+          for (let yy = 1; yy <= 3; yy++) px(gx + bx, anchor.y + yy + dy, 'w');
+        }
+      } else {
+        const gy = by < 0 ? anchor.y - 2 : anchor.y + 3;
+        const temple = anchor === EYE_L ? anchor.x - 1 : anchor.x + 4;
+        for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'w');
+        px(temple, gy + dy, 'w');
+        if (gtier === 3) {
+          px(anchor.x + 1, gy + by + dy, 'w');
+          px(anchor.x + 2, gy + by + dy, 'w');
+          px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'w');
         }
       }
     }
