@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('chud', {
   onAgentDone: (cb) => ipcRenderer.on('agent-done', (e, d) => cb(d)),
   onMenuCmd: (cb) => ipcRenderer.on('menu-cmd', (e, d) => cb(d)),
   wakeStart: () => ipcRenderer.send('wake-start'),
-  onBounceHurt: (cb) => ipcRenderer.on('bounce-hurt', () => cb()),
+  onBounceHurt: (cb) => ipcRenderer.on('bounce-hurt', (e, d) => cb(d)),
   wakeAudio: (buf) => ipcRenderer.send('wake-audio', buf),
   onWakeDetected: (cb) => ipcRenderer.on('wake-detected', () => cb()),
 });

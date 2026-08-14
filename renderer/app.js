@@ -194,7 +194,10 @@
     if (!fromBounce) window.chud.splat();
     VoiceFX.playUrl(`chud://app/assets/grunts/${pickScream(d)}`).catch(() => {});
   }
-  window.chud.onBounceHurt(() => ouch(true));
+  window.chud.onBounceHurt((d) => {
+    Goblin.impact(d && d.speed);
+    ouch(true);
+  });
 
   // Only a clean left tap toggles the session: not a drag, not a fling
   // catch, not anything that just punched him. Grabbing pauses the drift.

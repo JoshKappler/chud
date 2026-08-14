@@ -11,9 +11,12 @@
 <canvas id="c"></canvas>
 <script>
   // Seeded pixel blood splat hugging one wall (or radial for a punch),
-  // drips grow in, then the whole thing step-fades away.
+  // drips grow in, then the whole thing step-fades away. Everything
+  // scales with impact speed: k runs 0 at a graze to 1 at a full fling.
   const q = new URLSearchParams(location.search);
   const edge = q.get('edge') || 'punch';
+  const sp0 = Number(q.get('sp') || 0);
+  const k = edge === 'punch' ? 0.35 : Math.min(1, Math.max(0, (sp0 - 300) / 2200));
   let seed = Number(q.get('seed') || 1);
   const rng = () => {
     seed = (seed + 0x6d2b79f5) | 0;
@@ -35,7 +38,8 @@
   const cy = edge === 'top' ? 2 : edge === 'bottom' ? L - 3 : L / 2;
 
   const dots = [];
-  for (let i = 0; i < 46; i++) {
+  const nDots = Math.round(26 + 44 * k);
+  for (let i = 0; i < nDots; i++) {
     const ang = rng() * Math.PI * 2;
     const r = rng() * rng() * (L * 0.42);
     let x = cx + Math.cos(ang) * r;
@@ -46,11 +50,12 @@
     if (edge === 'bottom') y = cy - Math.abs(Math.sin(ang)) * r * 0.9;
     dots.push([Math.round(x), Math.round(y), COLORS[Math.floor(rng() * 3)]]);
   }
-  // thick smear along the wall itself
+  // thick smear along the wall itself, wider and deeper the harder he hit
   if (edge !== 'punch') {
-    for (let i = -8; i <= 8; i++) {
+    const half = 5 + Math.round(7 * k);
+    for (let i = -half; i <= half; i++) {
       if (rng() < 0.85) {
-        const t = Math.floor(rng() * 3);
+        const t = Math.floor(rng() * (2 + 2.5 * k));
         for (let d = 0; d <= t; d++) {
           if (edge === 'left') dots.push([d, Math.round(cy + i), COLORS[d === 0 ? 1 : 0]]);
           if (edge === 'right') dots.push([L - 1 - d, Math.round(cy + i), COLORS[d === 0 ? 1 : 0]]);
@@ -61,7 +66,7 @@
     }
   }
   const drips = [];
-  const nDrips = 2 + Math.floor(rng() * 3);
+  const nDrips = 1 + Math.round(rng() * (2 + 3 * k));
   for (let i = 0; i < nDrips; i++) {
     const [dx, dy] = dots[Math.floor(rng() * dots.length)];
     drips.push({ x: dx, y: dy, len: 4 + rng() * 9 });
@@ -70,7 +75,7 @@
   // flying droplets: sprayed away from the wall, pulled down by gravity,
   // frozen into stains where they land
   const drops = [];
-  const nDrops = 10 + Math.floor(rng() * 9);
+  const nDrops = Math.round((8 + rng() * 7) * (0.7 + 1.6 * k));
   for (let i = 0; i < nDrops; i++) {
     let ang;
     if (edge === 'left') ang = (rng() - 0.5) * 1.8;
@@ -78,7 +83,7 @@
     else if (edge === 'top') ang = Math.PI / 2 + (rng() - 0.5) * 1.8;
     else if (edge === 'bottom') ang = -Math.PI / 2 + (rng() - 0.5) * 1.8;
     else ang = rng() * Math.PI * 2;
-    const sp = 25 + rng() * 120;
+    const sp = (25 + rng() * 120) * (0.8 + 0.7 * k);
     drops.push({
       x: cx, y: cy,
       vx: Math.cos(ang) * sp,
@@ -89,27 +94,32 @@
     });
   }
 
-  // bone shards: pale 2px chips thrown harder and heavier than droplets
+  // shards: pale bone chips plus skin-colored flakes torn off the face,
+  // thrown harder and heavier than droplets, counts scaling with speed
   const BONE = ['#f5efd7', '#d8cfb2'];
+  const SKIN = ['#57a63f', '#37702a', '#8fd457'];
   const shards = [];
-  const nShards = 3 + Math.floor(rng() * 4);
-  for (let i = 0; i < nShards; i++) {
+  const nShards = 2 + Math.floor(rng() * 3) + Math.round(3 * k);
+  const nFlakes = 2 + Math.floor(rng() * 2) + Math.round(5 * k);
+  for (let i = 0; i < nShards + nFlakes; i++) {
+    const skin = i >= nShards;
     let ang;
     if (edge === 'left') ang = (rng() - 0.5) * 1.4;
     else if (edge === 'right') ang = Math.PI + (rng() - 0.5) * 1.4;
     else if (edge === 'top') ang = Math.PI / 2 + (rng() - 0.5) * 1.4;
     else if (edge === 'bottom') ang = -Math.PI / 2 + (rng() - 0.5) * 1.4;
     else ang = rng() * Math.PI * 2;
-    const sp = 20 + rng() * 70;
+    const sp = (20 + rng() * 70) * (skin ? 1.2 : 1);
     const flat = rng() < 0.5;
     shards.push({
       x: cx, y: cy,
       vx: Math.cos(ang) * sp,
       vy: Math.sin(ang) * sp,
       life: 0.25 + rng() * 0.35,
-      c: BONE[Math.floor(rng() * 2)],
+      c: skin ? SKIN[Math.floor(rng() * 3)] : BONE[Math.floor(rng() * 2)],
       w: flat ? 2 : 1,
       h: flat ? 1 : 2,
+      grav: skin ? 150 : 200,
       dead: false,
     });
   }
@@ -139,7 +149,7 @@
 
     for (const p of shards) {
       if (p.dead) continue;
-      p.vy += 200 * dt;
+      p.vy += p.grav * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.life -= dt;

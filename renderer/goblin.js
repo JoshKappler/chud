@@ -183,6 +183,7 @@ const Goblin = (() => {
   let sq = 0;
   let flutter = 0;
   let dirX = 0, dirY = 1;
+  let impactUntil = 0;
 
   // Stretch grows continuously with the lag magnitude: a hint past a slow
   // drag, a full extra head-length around 1500 px/s, capped at 1.2 extra
@@ -643,6 +644,9 @@ const Goblin = (() => {
     const amp = Math.min(2.5, 2.2 * E);
     const axS = 1 - 0.35 * sq;
     const offS = 1 + 0.3 * sq;
+    // A wall impact squashes against the wall: the leading edge stays
+    // planted and the body mashes into it, instead of pinching at center.
+    const pivot = now < impactUntil ? 14 : 0;
     for (let n = 0; n < VN * VN; n++) {
       const bx = ident[n * 2] - c;
       const by = ident[n * 2 + 1] - c;
@@ -653,7 +657,7 @@ const Goblin = (() => {
       const disp = E * HEAD * ease - adv;
       const wave = amp * a * a * Math.sin(now / 70 - a * 5)
         + flutter * 1.1 * Math.sin(now / 24 + a * 7 + o * 0.9);
-      const p2 = p * axS - disp;
+      const p2 = pivot + (p - pivot) * axS - disp;
       const o2 = (o + wave) * offS * (1 - 0.18 * E * a * a);
       const wx = c - ux * p2 + uy * o2;
       const wy = c - uy * p2 - ux * o2;
@@ -730,6 +734,10 @@ const Goblin = (() => {
     setEmote: (s) => { emote = s; },
     setHealSeconds: (s) => { healMs = Math.max(1, s) * 1000; },
     setMotion: (x, y) => { gvManual = true; gvx = x; gvy = y; },
+    impact: (speed) => {
+      impactUntil = performance.now() + 320;
+      skin.impulse(Math.min(9, (speed || 900) / 320));
+    },
     getDamage: () => damage,
     setDamage: (n) => {
       const grew = n > damage;

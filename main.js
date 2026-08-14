@@ -112,8 +112,8 @@ app.whenReady().then(async () => {
     if (win && !win.isDestroyed()) win.webContents.send('agent-done', payload);
   });
   drift.setOnBounce((hit) => {
-    splat.show(hit.edge, hit.ix, hit.iy, hit.wa);
-    if (win && !win.isDestroyed()) win.webContents.send('bounce-hurt');
+    splat.show(hit.edge, hit.ix, hit.iy, hit.wa, hit.speed);
+    if (win && !win.isDestroyed()) win.webContents.send('bounce-hurt', { speed: hit.speed });
   });
 
   createWindow();
