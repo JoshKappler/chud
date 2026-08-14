@@ -205,6 +205,9 @@ const Goblin = (() => {
   let dirX = 0, dirY = 1;
   let impactAt = -1e9;
   let impactK = 0;
+  let impNX = -1;
+  let impNY = 0;
+  const EDGE_AXES = { left: [1, 0], right: [-1, 0], top: [0, 1], bottom: [0, -1] };
 
   // Damage 15+: the eyes hang out of their sockets on optic threads,
   // each a damped pendulum blown around by the same skin lag; different
@@ -675,10 +678,12 @@ const Goblin = (() => {
   // the trailing side lags on a 60/40 linear-cubic profile, rippling and
   // thinning toward the tip. When the tail outgrows the pad the whole
   // sock advances a little instead of clipping. A wall impact goes water
-  // balloon: everything within the plaster distance lands flat ON the
-  // wall plane, the rest packs into the remaining sliver (3.5 cells at a
-  // full-speed slam), and the mass bulges sideways up to double breadth,
-  // widest right at the glass.
+  // balloon in the hit edge's own axis-aligned frame, frozen at impact
+  // so the pancake never tilts with an angled approach or the swinging
+  // lag: everything within the plaster distance lands flat ON the wall
+  // plane, the rest packs into the remaining sliver (3.5 cells at a
+  // full-speed slam), and the mass bulges along the wall up to double
+  // breadth, widest right at the glass.
   function deform(now) {
     const sp = Math.hypot(lagX, lagY);
     const E = extension(sp);
@@ -711,19 +716,21 @@ const Goblin = (() => {
       const disp = (E * HEAD * ease - adv) * (1 - squish);
       const wave = amp * a * a * Math.sin(now / 70 - a * 5)
         + flutter * 1.1 * Math.sin(now / 24 + a * 7 + o * 0.9);
-      let p2 = p * axS;
-      let spread = 1;
+      const p2 = p * axS - disp;
+      const o2 = (o + wave) * offS * (1 - 0.18 * E * a * a);
+      let wx = -ux * p2 + uy * o2;
+      let wy = -uy * p2 - ux * o2;
       if (mix) {
-        const d2 = Math.max(0, (14 - p) - plaster) * packK;
-        p2 = (14 - d2) * mix + p2 * (1 - mix);
-        spread = 1 + mix * squish * (1 - 0.65 * Math.min(1, d2 / depth));
+        const pw = -(wx * impNX + wy * impNY);
+        const ow = wx * impNY - wy * impNX;
+        const d2 = Math.max(0, (14 - pw) - plaster) * packK;
+        const pw2 = (14 - d2) * mix + pw * (1 - mix);
+        const spread = 1 + mix * squish * (1 - 0.65 * Math.min(1, d2 / depth));
+        wx = -impNX * pw2 + impNY * ow * spread;
+        wy = -impNY * pw2 - impNX * ow * spread;
       }
-      p2 -= disp;
-      const o2 = (o + wave) * offS * (1 - 0.18 * E * a * a) * spread;
-      const wx = c - ux * p2 + uy * o2;
-      const wy = c - uy * p2 - ux * o2;
-      verts[n * 2] = Math.min(GRID - 0.5, Math.max(0.5, wx));
-      verts[n * 2 + 1] = Math.min(GRID - 0.5, Math.max(0.5, wy));
+      verts[n * 2] = Math.min(GRID - 0.5, Math.max(0.5, c + wx));
+      verts[n * 2 + 1] = Math.min(GRID - 0.5, Math.max(0.5, c + wy));
     }
   }
 
@@ -799,9 +806,20 @@ const Goblin = (() => {
     setEmote: (s) => { emote = s; },
     setHealSeconds: (s) => { healMs = Math.max(1, s) * 1000; },
     setMotion: (x, y) => { gvManual = true; gvx = x; gvy = y; },
-    impact: (speed) => {
+    impact: (speed, edge) => {
       impactAt = performance.now();
       impactK = Math.min(1, Math.max(0.2, ((speed || 900) - 300) / 2300));
+      const ax = EDGE_AXES[edge];
+      if (ax) {
+        impNX = ax[0];
+        impNY = ax[1];
+      } else if (Math.abs(dirX) >= Math.abs(dirY)) {
+        impNX = dirX < 0 ? -1 : 1;
+        impNY = 0;
+      } else {
+        impNX = 0;
+        impNY = dirY < 0 ? -1 : 1;
+      }
       skin.impulse(Math.min(9, (speed || 900) / 320));
     },
     getDamage: () => damage,

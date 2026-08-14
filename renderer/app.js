@@ -195,7 +195,7 @@
     VoiceFX.playUrl(`chud://app/assets/grunts/${pickScream(d)}`).catch(() => {});
   }
   window.chud.onBounceHurt((d) => {
-    Goblin.impact(d && d.speed);
+    Goblin.impact(d && d.speed, d && d.edge);
     ouch(true);
   });
 

@@ -114,7 +114,7 @@ app.whenReady().then(async () => {
   });
   drift.setOnBounce((hit) => {
     splat.show(hit.edge, hit.ix, hit.iy, hit.wa, hit.speed);
-    if (win && !win.isDestroyed()) win.webContents.send('bounce-hurt', { speed: hit.speed });
+    if (win && !win.isDestroyed()) win.webContents.send('bounce-hurt', { speed: hit.speed, edge: hit.edge });
   });
 
   createWindow();
