@@ -482,7 +482,7 @@ const Goblin = (() => {
     }
 
     const gspeed = Math.hypot(gvx, gvy);
-    const gtier = damage >= 10 ? 0 : gspeed > 2100 ? 3 : gspeed > 1400 ? 2 : gspeed > 550 ? 1 : 0;
+    const gtier = damage >= 10 ? 0 : gspeed > 900 ? 3 : gspeed > 450 ? 2 : gspeed > 150 ? 1 : 0;
     if (gtier > 0) {
       drawGForce(now, OY + bob, gspeed, gtier);
       drawEmote(now);
