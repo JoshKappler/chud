@@ -40,9 +40,11 @@ window and every Space.
   Fling him and he ricochets off the screen edges until the water drag
   slows him back into his drift.
 - Yank him around fast and G forces take his face: cheeks balloon and
-  the mouth purses, then the skin stretches, gripped tight on the side
-  leading the acceleration and dragged flat toward the back, lips
-  flapping, with a few bone flecks peeking out beside the eyes.
+  the mouth purses, then the skin becomes a sock gripped on the side
+  leading the acceleration, trailing up to a full head-length behind
+  him, rippling in the wind, lips flapping, the eyes wide with a black
+  sagging gap on their trailing side. The window quietly grows to fit
+  the tail and shrinks back after.
 - Right click to punch him. Hard wall bounces and held drag-bashes into a
   monitor edge hurt too. Twenty damage stages: bruises, cuts and blood
   through stage 9, then the skin falls away patch by patch from stage 10,

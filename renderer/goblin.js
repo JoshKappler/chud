@@ -8,8 +8,29 @@ const Goblin = (() => {
 
   function setScale(n) {
     S = n;
-    canvas.width = 28 * S;
-    canvas.height = 28 * S;
+    canvas.width = cellsW * S;
+    canvas.height = cellsH * S;
+  }
+
+  // Grows the canvas and window to fit the stretched sock and pins the
+  // head to the same screen spot by shifting the window origin. lastPX
+  // and lastPY absorb the shift so the velocity poll sees no jump.
+  function applyGeometry(hx, hy, cw, ch) {
+    if (hx === headOX && hy === headOY && cw === cellsW && ch === cellsH) return;
+    const mx = (headOX - hx) * S;
+    const my = (headOY - hy) * S;
+    headOX = hx;
+    headOY = hy;
+    cellsW = cw;
+    cellsH = ch;
+    canvas.width = cw * S;
+    canvas.height = ch * S;
+    window.resizeTo(cw * S, ch * S);
+    if (mx || my) {
+      window.moveTo(window.screenX + mx, window.screenY + my);
+      lastPX += mx;
+      lastPY += my;
+    }
   }
 
   const PAL = {
@@ -162,6 +183,15 @@ const Goblin = (() => {
   let lastPY = 0;
   let lastPT = 0;
   let pxTarget = null;
+  let headOX = 0;
+  let headOY = 0;
+  let cellsW = 28;
+  let cellsH = 28;
+  let gDragging = false;
+  let gDirX = 0;
+  let gDirY = 0;
+  let gDirCand = '';
+  let gDirSince = 0;
 
   function px(x, y, c) {
     if (pxTarget) {
@@ -169,7 +199,7 @@ const Goblin = (() => {
       return;
     }
     ctx.fillStyle = damage >= 8 && PALE[c] ? PALE[c] : PAL[c];
-    ctx.fillRect((x + offX) * S, y * S, S, S);
+    ctx.fillRect((x + offX + headOX) * S, (y + headOY) * S, S, S);
   }
 
   function drawMap(rows, ox, oy) {
@@ -308,7 +338,7 @@ const Goblin = (() => {
     if (!badge) return;
     const text = String(Math.min(badge, 9));
     ctx.fillStyle = PAL.m;
-    ctx.fillRect(21 * S, 21 * S, 5 * S, 7 * S);
+    ctx.fillRect((21 + headOX) * S, (21 + headOY) * S, 5 * S, 7 * S);
     drawMap(DIGITS[text], 22, 22);
   }
 
@@ -370,11 +400,10 @@ const Goblin = (() => {
   }
 
   // Cartoon G-force face. Tier 1: balloon cheeks, pursed mouth, wide eyes
-  // with trailing pupils. Tier 2 up: the skin is one continuous sheet
-  // gripped on the side leading the acceleration and stretched flat
-  // toward the back; the eyes stay visible, and beside each one, on the
-  // trailing side, the skin sags away in a bone-colored crescent that
-  // droops below the eye line.
+  // with trailing pupils. Tier 2 up: the skin is a sock gripped on the
+  // side leading the acceleration, stretched up to twice its breadth
+  // behind, rippling in the wind and fading out at the frame edge; the
+  // eyes stay visible with a black sagging gap on their trailing side.
   function drawGForce(now, dy, gspeed, gtier) {
     if (gtier === 1) {
       drawSkin(now, dy, 1);
@@ -389,19 +418,19 @@ const Goblin = (() => {
     for (const anchor of [EYE_L, EYE_R]) {
       if (bx) {
         const gx = bx < 0 ? anchor.x - 1 : anchor.x + 4;
-        for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'w');
+        for (let yy = 0; yy <= 3; yy++) px(gx, anchor.y + yy + dy, 'o');
         if (gtier === 3) {
-          for (let yy = 1; yy <= 3; yy++) px(gx + bx, anchor.y + yy + dy, 'w');
+          for (let yy = 1; yy <= 3; yy++) px(gx + bx, anchor.y + yy + dy, 'o');
         }
       } else {
         const gy = by < 0 ? anchor.y - 2 : anchor.y + 3;
         const temple = anchor === EYE_L ? anchor.x - 1 : anchor.x + 4;
-        for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'w');
-        px(temple, gy + dy, 'w');
+        for (let xx = 0; xx < 4; xx++) px(anchor.x + xx, gy + dy, 'o');
+        px(temple, gy + dy, 'o');
         if (gtier === 3) {
-          px(anchor.x + 1, gy + by + dy, 'w');
-          px(anchor.x + 2, gy + by + dy, 'w');
-          px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'w');
+          px(anchor.x + 1, gy + by + dy, 'o');
+          px(anchor.x + 2, gy + by + dy, 'o');
+          px(temple + (anchor === EYE_L ? -1 : 1), gy + dy, 'o');
         }
       }
     }
@@ -415,22 +444,39 @@ const Goblin = (() => {
       if (p > pMax) pMax = p;
       if (p < pMin) pMin = p;
     }
-    const f = gtier === 3 ? 0.25 : 0.1;
-    const lag = (pMax - pMin) * f;
-    for (let Y = -8; Y < 32; Y++) {
-      for (let X = -8; X < 36; X++) {
+    const f = gtier === 3 ? 1.0 : 0.45;
+    const amp = gtier === 3 ? 2.5 : 1;
+    const depth = pMax - pMin;
+    const span = depth * (1 + f);
+    const k = f / (depth * depth);
+    const xLo = -headOX;
+    const xHi = cellsW - headOX;
+    const yLo = -headOY;
+    const yHi = cellsH - headOY;
+    for (let Y = yLo; Y < yHi; Y++) {
+      for (let X = xLo; X < xHi; X++) {
         const p = X * ux + Y * uy;
-        if (p > pMax || p < pMin - lag) continue;
-        const off = -X * uy + Y * ux;
-        const ps = pMax - (pMax - p) / (1 + f);
+        const dd = pMax - p;
+        if (dd < 0 || dd > span) continue;
+        const q = dd / span;
+        const wave = amp * q * q * Math.sin(now / 70 - q * 4);
+        const off = -X * uy + Y * ux - wave;
+        let sB = dd;
+        for (let i = 0; i < 4; i++) sB -= (sB + k * sB * sB * sB - dd) / (1 + 3 * k * sB * sB);
+        const ps = pMax - sB;
         const xs = Math.round(ps * ux - off * uy);
         const ys = Math.round(ps * uy + off * ux);
         const c = buf.get(xs + ',' + ys);
         if (!c) continue;
+        const dxe = ux > 0 ? (X - xLo) / ux : ux < 0 ? (X - xHi + 1) / ux : Infinity;
+        const dye = uy > 0 ? (Y - yLo) / uy : uy < 0 ? (Y - yHi + 1) / uy : Infinity;
+        const edgeDist = Math.min(dxe, dye);
+        ctx.globalAlpha = q > 0.25 ? Math.min(1, 0.15 + edgeDist / 5) : 1;
         ctx.fillStyle = damage >= 8 && PALE[c] ? PALE[c] : PAL[c];
-        ctx.fillRect((X + offX) * S, Y * S, S, S);
+        ctx.fillRect((X + offX + headOX) * S, (Y + headOY) * S, S, S);
       }
     }
+    ctx.globalAlpha = 1;
   }
 
   function render(now) {
@@ -483,6 +529,41 @@ const Goblin = (() => {
 
     const gspeed = Math.hypot(gvx, gvy);
     const gtier = damage >= 10 ? 0 : gspeed > 900 ? 3 : gspeed > 450 ? 2 : gspeed > 150 ? 1 : 0;
+    if (gtier >= 2 && gDragging && gspeed > 0) {
+      // Tail room is capped to the space between the head and the screen
+      // edge: a window edge past the wall would clamp in drift and fire
+      // phantom hurts. Quantized to whole 7-cell steps to limit resizes,
+      // and the direction must hold 150ms before the geometry flips.
+      const tbx = Math.round(-gvx / gspeed);
+      const tby = Math.round(-gvy / gspeed);
+      if (tbx !== gDirX || tby !== gDirY) {
+        const cand = tbx + ',' + tby;
+        if (cand !== gDirCand) {
+          gDirCand = cand;
+          gDirSince = now;
+        } else if (now - gDirSince > 150) {
+          gDirX = tbx;
+          gDirY = tby;
+        }
+      }
+      const scr = window.screen;
+      const headSX = window.screenX + headOX * S;
+      const headSY = window.screenY + headOY * S;
+      let gw = 0;
+      let gh = 0;
+      if (gDirX < 0) gw = (headSX - scr.availLeft) / S;
+      else if (gDirX > 0) gw = (scr.availLeft + scr.availWidth - headSX - 28 * S) / S;
+      if (gDirY < 0) gh = (headSY - scr.availTop) / S;
+      else if (gDirY > 0) gh = (scr.availTop + scr.availHeight - headSY - 28 * S) / S;
+      gw = Math.floor(Math.max(0, Math.min(28, gw)) / 7) * 7;
+      gh = Math.floor(Math.max(0, Math.min(28, gh)) / 7) * 7;
+      applyGeometry(gDirX < 0 ? gw : 0, gDirY < 0 ? gh : 0, 28 + gw, 28 + gh);
+    } else {
+      applyGeometry(0, 0, 28, 28);
+      gDirX = 0;
+      gDirY = 0;
+      gDirCand = '';
+    }
     if (gtier > 0) {
       drawGForce(now, OY + bob, gspeed, gtier);
       drawEmote(now);
@@ -522,7 +603,17 @@ const Goblin = (() => {
 
   return {
     setScale,
-    start: () => { setScale(S); requestAnimationFrame(render); },
+    start: () => {
+      setScale(S);
+      canvas.addEventListener('mousedown', (e) => {
+        if (e.button === 0) gDragging = true;
+      });
+      window.addEventListener('mouseup', () => {
+        gDragging = false;
+        applyGeometry(0, 0, 28, 28);
+      });
+      requestAnimationFrame(render);
+    },
     setState: (s) => { state = s; },
     getState: () => state,
     setLevel: (v) => { level = v; },
