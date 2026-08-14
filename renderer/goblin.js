@@ -232,11 +232,11 @@ const Goblin = (() => {
       if (damage < lvl) continue;
       for (const [x, y, c] of BLOTCHES[lvl]) px(x, y + dy, c);
     }
-    if (damage >= 4 && !gStretch) {
+    if (damage >= 4 && !pxTarget) {
       ctx.clearRect((1 + offX) * S, (5 + dy) * S, S, S);
       ctx.clearRect((2 + offX) * S, (6 + dy) * S, S, S);
     }
-    if (damage >= 6 && !gStretch) {
+    if (damage >= 6 && !pxTarget) {
       ctx.clearRect((26 + offX) * S, (5 + dy) * S, S, S);
       ctx.clearRect((25 + offX) * S, (6 + dy) * S, S, S);
     }
