@@ -52,9 +52,10 @@ window and every Space.
   skin lags on a base-excited spring, so a yank reaches it the frame it
   happens. It stretches up to double his breadth on a wild fling, snaps
   back with an overshoot wobble when he stops, squashes flat on hard
-  reversals, and flutters under violent shaking. Cheeks balloon and the
-  mouth purses as speed builds, then lips flap and a black sagging gap
-  opens on each eye's trailing side. The window carries a transparent
+  reversals, and flutters under violent shaking. His ears flop with
+  every swing and stream flat at speed, the mouth purses as speed
+  builds, then lips flap and a black sagging gap opens on each eye's
+  trailing side. The window carries a transparent
   margin so the tail always fits; only the head square catches the
   mouse.
 - Right click to punch him. Hard wall bounces and held drag-bashes into a

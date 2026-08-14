@@ -462,9 +462,25 @@ const Goblin = (() => {
     }
   }
 
+  // Ears shear toward the tip by the spring lag, so a yank flops them
+  // and the snapback overshoot wobbles them.
+  function drawEars(dy, earsUp) {
+    const flop = damage >= 10 ? 0
+      : Math.max(-3.5, Math.min(3.5, lagY * 0.009 + Math.min(2.5, Math.abs(lagX) * 0.005)));
+    for (let y = 0; y <= 10; y++) {
+      for (let x = 0; x < BASE[y].length; x++) {
+        if (x > 6 && x < 21) continue;
+        const c = BASE[y][x];
+        if (c === '.') continue;
+        const t = x <= 6 ? (6 - x) / 6 : (x - 21) / 6;
+        px(x, y + dy + (earsUp ? -1 : 0) + Math.round(t * flop), c);
+      }
+    }
+  }
+
   // Every feature scales with the smoothed lag, so nothing pops at a
-  // speed threshold: cheeks balloon in first, then wide eyes and a pursed
-  // mouth, then flapping lips and the eye gaps as the stretch deepens.
+  // speed threshold: wide eyes and a pursed mouth come in first, then
+  // flapping lips and the eye gaps as the stretch deepens.
   function drawFace(now) {
     faceCtx.clearRect(0, 0, HEAD, HEAD);
     target = faceCtx;
@@ -488,20 +504,12 @@ const Goblin = (() => {
     for (let y = 0; y < BASE.length; y++) {
       for (let x = 0; x < BASE[y].length; x++) {
         const c = BASE[y][x];
-        if (c === '.') continue;
-        const isEar = x <= 6 || x >= 21;
-        px(x, y + dy + (isEar && earsUp && y <= 10 ? -1 : 0), c);
+        if (c === '.' || ((x <= 6 || x >= 21) && y <= 10)) continue;
+        px(x, y + dy, c);
       }
     }
     for (const [x, y, c] of WARTS) px(x, y + dy, c);
-
-    const cheekA = smooth(130, 300, sp);
-    if (cheekA > 0.02) {
-      faceCtx.globalAlpha = cheekA;
-      drawMap(['..oo', '.oll', 'olll', '.oll', '..oo'], 3, 11 + dy);
-      drawMap(['oo..', 'llo.', 'lllo', 'llo.', 'oo..'], 21, 11 + dy);
-      faceCtx.globalAlpha = 1;
-    }
+    drawEars(dy, earsUp);
 
     const dangling = damage >= 15;
     if (!dangling) {
