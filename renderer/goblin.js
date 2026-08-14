@@ -203,7 +203,8 @@ const Goblin = (() => {
   let sq = 0;
   let flutter = 0;
   let dirX = 0, dirY = 1;
-  let impactUntil = 0;
+  let impactAt = -1e9;
+  let impactK = 0;
 
   // Damage 15+: the eyes hang out of their sockets on optic threads,
   // each a damped pendulum blown around by the same skin lag; different
@@ -665,11 +666,19 @@ const Goblin = (() => {
   // Sock deformation: the side leading the acceleration stays gripped,
   // the trailing side lags on a 60/40 linear-cubic profile, rippling and
   // thinning toward the tip. When the tail outgrows the pad the whole
-  // sock advances a little instead of clipping.
+  // sock advances a little instead of clipping. A wall impact goes water
+  // balloon: everything within the plaster distance lands flat ON the
+  // wall plane, the rest packs into the remaining sliver (3.5 cells at a
+  // full-speed slam), and the mass bulges sideways up to double breadth,
+  // widest right at the glass.
   function deform(now) {
     const sp = Math.hypot(lagX, lagY);
     const E = extension(sp);
-    if (E < 0.01 && Math.abs(sq) < 0.01 && flutter < 0.05) {
+    const it = now - impactAt;
+    const squish = it >= 0 && it < 700
+      ? impactK * Math.min(1, it / 40) * Math.exp(-Math.max(0, it - 90) / 150)
+      : 0;
+    if (E < 0.01 && Math.abs(sq) < 0.01 && flutter < 0.05 && squish < 0.01) {
       verts.set(ident);
       return;
     }
@@ -680,9 +689,10 @@ const Goblin = (() => {
     const amp = Math.min(2.5, 2.2 * E);
     const axS = 1 - 0.35 * sq;
     const offS = 1 + 0.3 * sq;
-    // A wall impact squashes against the wall: the leading edge stays
-    // planted and the body mashes into it, instead of pinching at center.
-    const pivot = now < impactUntil ? 14 : 0;
+    const mix = Math.min(1, squish * 8);
+    const plaster = 9.5 * squish;
+    const depth = HEAD * (1 - 0.875 * squish);
+    const packK = depth / (HEAD - plaster);
     for (let n = 0; n < VN * VN; n++) {
       const bx = ident[n * 2] - c;
       const by = ident[n * 2 + 1] - c;
@@ -690,11 +700,18 @@ const Goblin = (() => {
       const o = bx * uy - by * ux;
       const a = Math.min(1, Math.max(0, (14 - p) / HEAD));
       const ease = a * (0.6 + 0.4 * a * a);
-      const disp = E * HEAD * ease - adv;
+      const disp = (E * HEAD * ease - adv) * (1 - squish);
       const wave = amp * a * a * Math.sin(now / 70 - a * 5)
         + flutter * 1.1 * Math.sin(now / 24 + a * 7 + o * 0.9);
-      const p2 = pivot + (p - pivot) * axS - disp;
-      const o2 = (o + wave) * offS * (1 - 0.18 * E * a * a);
+      let p2 = p * axS;
+      let spread = 1;
+      if (mix) {
+        const d2 = Math.max(0, (14 - p) - plaster) * packK;
+        p2 = (14 - d2) * mix + p2 * (1 - mix);
+        spread = 1 + mix * squish * (1 - 0.65 * Math.min(1, d2 / depth));
+      }
+      p2 -= disp;
+      const o2 = (o + wave) * offS * (1 - 0.18 * E * a * a) * spread;
       const wx = c - ux * p2 + uy * o2;
       const wy = c - uy * p2 - ux * o2;
       verts[n * 2] = Math.min(GRID - 0.5, Math.max(0.5, wx));
@@ -775,7 +792,8 @@ const Goblin = (() => {
     setHealSeconds: (s) => { healMs = Math.max(1, s) * 1000; },
     setMotion: (x, y) => { gvManual = true; gvx = x; gvy = y; },
     impact: (speed) => {
-      impactUntil = performance.now() + 320;
+      impactAt = performance.now();
+      impactK = Math.min(1, Math.max(0.2, ((speed || 900) - 300) / 2300));
       skin.impulse(Math.min(9, (speed || 900) / 320));
     },
     getDamage: () => damage,

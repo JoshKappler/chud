@@ -58,7 +58,10 @@ window and every Space.
   margin so the tail always fits; only the head square catches the
   mouse.
 - Right click to punch him. Hard wall bounces and held drag-bashes into a
-  monitor edge hurt too. Twenty damage stages: bruises, cuts and blood
+  monitor edge hurt too, and he hits like a water balloon: the impact
+  side plasters flat onto the wall and the harder the hit the flatter he
+  goes, down to a smear a few pixels thick and twice his usual breadth
+  before he rebounds. Twenty damage stages: bruises, cuts and blood
   through stage 9, the skin falls away patch by patch from stage 10, his
   eyes pop from their sockets at 15 and swing on their optic threads
   until only his skull is left at 20, cracked crown, gap teeth and empty
