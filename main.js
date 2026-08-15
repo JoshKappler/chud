@@ -89,15 +89,23 @@ function createWindow() {
 // cursor that outruns the chasing window cannot sever the drag.
 function startCursorPoll(pad) {
   let ignoring = false;
+  let lastFlip = 0;
+  const HYST = 6;
   setInterval(() => {
     if (!win || win.isDestroyed()) return;
     const c = screen.getCursorScreenPoint();
     const b = win.getBounds();
-    const over = c.x >= b.x + pad && c.x < b.x + b.width - pad
-      && c.y >= b.y + pad && c.y < b.y + b.height - pad;
+    // Each flip re-hit-tests the window under the pointer, which macOS
+    // answers by re-resolving the cursor; a pointer resting on the
+    // boundary would otherwise flip every tick and flicker the cursor.
+    const m = ignoring ? HYST : -HYST;
+    const over = c.x >= b.x + pad + m && c.x < b.x + b.width - pad - m
+      && c.y >= b.y + pad + m && c.y < b.y + b.height - pad - m;
     const want = !over && !dragging;
-    if (want !== ignoring) {
+    const now = Date.now();
+    if (want !== ignoring && now - lastFlip > 100) {
       ignoring = want;
+      lastFlip = now;
       win.setIgnoreMouseEvents(want);
       if (DEBUG) dbgLog(`[ignore] ${want}`);
     }
@@ -167,6 +175,7 @@ ipcMain.on('wake-start', () => {
   }
 });
 ipcMain.on('wake-audio', (e, buf) => wakewatch.append(buf));
+ipcMain.on('drag-tick', () => drift.dragTick());
 ipcMain.on('drag-state', (e, v) => {
   dragging = !!v;
   drift.setDragging(dragging);

@@ -219,9 +219,19 @@
     window.chud.grab().then((r) => {
       if (down === d) down.wasFlinging = r.wasFlinging;
     });
+    if (!dragRAF) dragRAF = requestAnimationFrame(pumpDrag);
   });
-  // The main process moves the window from its own cursor poll while
-  // dragging; mousemove here only tells a tap from a drag.
+  // One drag tick per displayed frame; the main process reads the
+  // cursor itself, so mousemove below only tells a tap from a drag.
+  let dragRAF = 0;
+  function pumpDrag() {
+    if (!down) {
+      dragRAF = 0;
+      return;
+    }
+    window.chud.dragTick();
+    dragRAF = requestAnimationFrame(pumpDrag);
+  }
   window.addEventListener('mousemove', (e) => {
     if (!down) return;
     if (Math.abs(e.screenX - down.x) + Math.abs(e.screenY - down.y) > 3) dragged = true;

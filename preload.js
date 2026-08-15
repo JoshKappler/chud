@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('chud', {
   tool: (name, args) => ipcRenderer.invoke('tool-call', { name, args }),
   getConfig: () => ipcRenderer.invoke('get-config'),
   dragState: (v) => ipcRenderer.send('drag-state', v),
+  dragTick: () => ipcRenderer.send('drag-tick'),
   grab: () => ipcRenderer.invoke('win-grab'),
   splat: () => ipcRenderer.send('splat-here'),
   menu: (state) => ipcRenderer.send('goblin-menu', state),

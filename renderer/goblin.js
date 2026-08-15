@@ -201,6 +201,7 @@ const Goblin = (() => {
   let dbgFrames = 0;
   let dbgMaxGap = 0;
   let dbgAt = 0;
+  let lastSig = null;
   let lagX = 0, lagY = 0;
   let sq = 0;
   let flutter = 0;
@@ -493,12 +494,15 @@ const Goblin = (() => {
   // Every feature scales with the smoothed lag, so nothing pops at a
   // speed threshold: wide eyes and a pursed mouth come in first, then
   // flapping lips and the eye gaps as the stretch deepens.
+  function bobVal(now) {
+    const bobSpeed = state === 'talking' ? 260 : state === 'listening' ? 400 : 900;
+    return Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
+  }
+
   function drawFace(now) {
     faceCtx.clearRect(0, 0, HEAD, HEAD);
     target = faceCtx;
-    const bobSpeed = state === 'talking' ? 260 : state === 'listening' ? 400 : 900;
-    const bob = Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
-    const dy = OY + bob;
+    const dy = OY + bobVal(now);
     if (damage >= 20) {
       const jaw = state === 'talking' && shownLevel > 0.1 ? 1 : 0;
       drawSkullFace(dy, jaw);
@@ -813,6 +817,24 @@ const Goblin = (() => {
       stepPend(pendL, dt, 7.5);
       stepPend(pendR, dt, 8.7);
     }
+
+    // Skip the draw when he is calm and nothing visible changed: a
+    // transparent always-on-top window repainting at 120fps makes macOS
+    // re-resolve the pointer, which flickers an idle cursor, and it
+    // burns GPU for identical frames. Physics above still ran.
+    const it = now - impactAt;
+    const calm = extension(Math.hypot(lagX, lagY)) < 0.01 && Math.abs(sq) < 0.01
+      && flutter < 0.05 && (it < 0 || it > 900);
+    const sig = `${state}|${damage}|${badge}|${emote}|${bobVal(now)}|${look}|${now < blinkUntil}`
+      + `|${now < twitchUntil}|${now < shakeUntil}|${shownLevel.toFixed(2)}`
+      + `|${Math.round(lagX / 20)},${Math.round(lagY / 20)}`
+      + `|${damage >= 15 && damage < 20 ? pendL.th.toFixed(2) + ',' + pendR.th.toFixed(2) : ''}`;
+    if (calm && sig === lastSig) {
+      requestAnimationFrame(render);
+      return;
+    }
+    lastSig = sig;
+
     drawFace(now);
     drawOverlay(now);
     deform(now);
@@ -827,7 +849,7 @@ const Goblin = (() => {
       initGL();
       setScale(S);
       canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); glLost = true; });
-      canvas.addEventListener('webglcontextrestored', () => { glLost = false; initGL(); });
+      canvas.addEventListener('webglcontextrestored', () => { glLost = false; lastSig = null; initGL(); });
       requestAnimationFrame(render);
     },
     setState: (s) => { state = s; },
