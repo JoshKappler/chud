@@ -208,6 +208,11 @@ const Goblin = (() => {
   let impNX = -1;
   let impNY = 0;
   const EDGE_AXES = { left: [1, 0], right: [-1, 0], top: [0, 1], bottom: [0, -1] };
+  // Where the drawn sprite actually ends along each impact axis, in cells
+  // from center: the pack targets this edge so the smear sits flush on
+  // the glass instead of stopping at the sprite's transparent margin.
+  const EDGE_LEAD = { left: 13.5, right: 13.5, top: 12, bottom: 9.5 };
+  let impLead = 14;
 
   // Damage 15+: the eyes hang out of their sockets on optic threads,
   // each a damped pendulum blown around by the same skin lag; different
@@ -734,7 +739,7 @@ const Goblin = (() => {
       if (crush > 0.05) {
         const pw = -(wx * impNX + wy * impNY);
         const ow = wx * impNY - wy * impNX;
-        const f = Math.min(1, Math.max(0, (pw - front) / crush));
+        const f = Math.min(1, Math.max(0, (pw - front) / Math.max(0.5, impLead - front)));
         const packed = plane - pack * (1 - f);
         const rigid = pw + (plane - 14) + (crush - pack);
         let m = Math.min(1, Math.max(0, (pw - front + 2) / 4));
@@ -823,6 +828,7 @@ const Goblin = (() => {
       impactK = tm.k;
       impactTau = tm.tau;
       impactWall = typeof wall === 'number' ? wall : null;
+      impLead = EDGE_LEAD[edge] || 14;
       const ax = EDGE_AXES[edge];
       if (ax) {
         impNX = ax[0];

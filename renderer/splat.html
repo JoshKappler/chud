@@ -4,27 +4,27 @@
   <meta charset="utf-8" />
   <style>
     html, body { margin: 0; background: transparent; overflow: hidden; }
-    canvas { image-rendering: pixelated; display: block; }
+    canvas { image-rendering: pixelated; display: block; width: 100vw; height: 100vh; }
   </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <script>
-  // Persistent display-sized blood overlay. The main process injects hits
-  // via addSplat; each splat keeps its own seeded layout, droplets, drips
-  // and fade clock, so any number of smears coexist on screen at once.
-  // Everything scales with impact speed: k runs 0 at a graze to 1 at a
-  // full fling.
+  // Persistent blood overlay: one backing pixel per cell, CSS-upscaled,
+  // repainting only when content changes; a display-sized always-on-top
+  // surface repainting at 60fps stutters the whole desktop. Each splat
+  // keeps its own seeded layout, droplets, drips and fade clock; k runs
+  // 0 at a graze to 1 at a full fling.
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   const S = 4;
   let CW = 0;
   let CH = 0;
   function fit() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    CW = Math.floor(canvas.width / S);
-    CH = Math.floor(canvas.height / S);
+    CW = Math.floor(window.innerWidth / S);
+    CH = Math.floor(window.innerHeight / S);
+    canvas.width = CW;
+    canvas.height = CH;
   }
   window.addEventListener('resize', fit);
   fit();
@@ -143,7 +143,7 @@
     }
 
     const born = performance.now();
-    splats.push({ edge, dots, drips, drops, shards, born, lastT: born });
+    splats.push({ edge, dots, drips, drops, shards, born, lastT: born, step: 0, alpha: 1 });
     if (!running) {
       running = true;
       requestAnimationFrame(draw);
@@ -151,21 +151,28 @@
   };
 
   function draw(now) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let dirty = false;
     for (let si = splats.length - 1; si >= 0; si--) {
       const s = splats[si];
       const age = (now - s.born) / 1000;
       const dt = Math.min(0.05, (now - s.lastT) / 1000);
       s.lastT = now;
-      const grow = Math.min(1, age / 1.2);
-      const alpha = age < 2 ? 1 : Math.max(0, 1 - Math.floor((age - 2) * 3) * 0.2);
-      if (alpha <= 0) {
+      const step = age < 2 ? 0 : 1 + Math.floor((age - 2) * 3);
+      s.alpha = age < 2 ? 1 : Math.max(0, 1 - Math.floor((age - 2) * 3) * 0.2);
+      if (s.alpha <= 0) {
         splats.splice(si, 1);
+        dirty = true;
         continue;
       }
+      if (step !== s.step) {
+        s.step = step;
+        dirty = true;
+      }
+      if (age < 1.25) dirty = true;
 
       for (const p of s.drops) {
         if (p.dead) continue;
+        dirty = true;
         p.vy += 150 * dt;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -180,6 +187,7 @@
 
       for (const p of s.shards) {
         if (p.dead) continue;
+        dirty = true;
         p.vy += p.grav * dt;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -195,36 +203,45 @@
           }
         }
       }
-
-      ctx.globalAlpha = alpha;
-      for (const [x, y, c] of s.dots) {
-        ctx.fillStyle = c;
-        ctx.fillRect(x * S, y * S, S, S);
-      }
-      for (const p of s.drops) {
-        if (p.dead) continue;
-        ctx.fillStyle = p.c;
-        ctx.fillRect(Math.round(p.x) * S, Math.round(p.y) * S, S, S);
-      }
-      for (const p of s.shards) {
-        if (p.dead) continue;
-        ctx.fillStyle = p.c;
-        ctx.fillRect(Math.round(p.x) * S, Math.round(p.y) * S, p.w * S, p.h * S);
-      }
-      for (const d of s.drips) {
-        const n = Math.floor(d.len * grow);
-        for (let i = 0; i < n; i++) {
-          ctx.fillStyle = COLORS[i > d.len * 0.6 ? 1 : 0];
-          if (s.edge === 'bottom') ctx.fillRect((d.x + i) * S, d.y * S, S, S);
-          else ctx.fillRect(d.x * S, (d.y + i) * S, S, S);
-        }
-      }
     }
-    ctx.globalAlpha = 1;
+
+    if (dirty) {
+      window.__paints = (window.__paints || 0) + 1;
+      ctx.clearRect(0, 0, CW, CH);
+      for (const s of splats) paintSplat(s, now);
+      ctx.globalAlpha = 1;
+    }
     if (splats.length) requestAnimationFrame(draw);
     else {
       running = false;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, CW, CH);
+    }
+  }
+
+  function paintSplat(s, now) {
+    const grow = Math.min(1, (now - s.born) / 1000 / 1.2);
+    ctx.globalAlpha = s.alpha;
+    for (const [x, y, c] of s.dots) {
+      ctx.fillStyle = c;
+      ctx.fillRect(x, y, 1, 1);
+    }
+    for (const p of s.drops) {
+      if (p.dead) continue;
+      ctx.fillStyle = p.c;
+      ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+    }
+    for (const p of s.shards) {
+      if (p.dead) continue;
+      ctx.fillStyle = p.c;
+      ctx.fillRect(Math.round(p.x), Math.round(p.y), p.w, p.h);
+    }
+    for (const d of s.drips) {
+      const n = Math.floor(d.len * grow);
+      for (let i = 0; i < n; i++) {
+        ctx.fillStyle = COLORS[i > d.len * 0.6 ? 1 : 0];
+        if (s.edge === 'bottom') ctx.fillRect(d.x + i, d.y, 1, 1);
+        else ctx.fillRect(d.x, d.y + i, 1, 1);
+      }
     }
   }
 </script>
