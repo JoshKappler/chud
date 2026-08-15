@@ -64,7 +64,8 @@ function createWindow() {
   const damage = process.env.CHUD_DAMAGE || '';
   const page = process.env.CHUD_PAGE || 'index';
   const edge = process.env.CHUD_EDGE || 'punch';
-  const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}&edge=${edge}&seed=7`
+  const speed = process.env.CHUD_SPEED || '';
+  const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}&edge=${edge}&speed=${speed}&seed=7`
     : (DEBUG ? '?debug=1' : '');
   if (DEBUG) win.webContents.on('console-message', (e, l, m) => dbgLog('[r] ' + m));
   win.loadURL(`chud://app/renderer/${page}.html${qs}`);

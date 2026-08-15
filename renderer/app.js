@@ -17,6 +17,12 @@
     Goblin.setBadge(Number(q.get('badge') || 0));
     Goblin.setDamage(Number(q.get('damage') || 0));
     Goblin.setEmote(q.get('emote') || null);
+    const edge = q.get('edge');
+    if (['left', 'right', 'top', 'bottom'].includes(edge)) {
+      Goblin.setMotion(0, 0);
+      // Fired late so the 1200ms capture lands on the envelope plateau.
+      setTimeout(() => Goblin.impact(Number(q.get('speed') || 1600), edge, null), 1130);
+    }
     return;
   }
 

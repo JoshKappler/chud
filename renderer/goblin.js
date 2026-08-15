@@ -213,11 +213,48 @@ const Goblin = (() => {
   let impNX = -1;
   let impNY = 0;
   const EDGE_AXES = { left: [1, 0], right: [-1, 0], top: [0, 1], bottom: [0, -1] };
-  // Where the drawn sprite actually ends along each impact axis, in cells
-  // from center: the pack targets this edge so the smear sits flush on
-  // the glass instead of stopping at the sprite's transparent margin.
-  const EDGE_LEAD = { left: 13.5, right: 13.5, top: 12, bottom: 9.5 };
+  const IMP_MS = 900;
+  // Silhouette lead per mesh line and edge: how far, in cells from center,
+  // the sprite reaches toward that edge in each column or row. The crush
+  // lands every line's own lead on the glass, so contact grows into a flat
+  // patch like a squashed ball instead of only the apex touching.
+  const EDGE_PROFILES = (() => {
+    const H = HEAD / 2;
+    const top = new Array(HEAD).fill(Infinity);
+    const bot = new Array(HEAD).fill(-Infinity);
+    const lef = new Array(HEAD).fill(Infinity);
+    const rig = new Array(HEAD).fill(-Infinity);
+    for (let y = 0; y < BASE.length; y++) {
+      for (let x = 0; x < BASE[y].length; x++) {
+        if (BASE[y][x] === '.') continue;
+        const r = y + OY;
+        if (r < top[x]) top[x] = r;
+        if (r > bot[x]) bot[x] = r;
+        if (x < lef[r]) lef[r] = x;
+        if (x > rig[r]) rig[r] = x;
+      }
+    }
+    const lines = (cells, f) => {
+      const lead = new Float32Array(HEAD + 1);
+      let max = -H;
+      for (let i = 0; i <= HEAD; i++) {
+        const a = f(cells[Math.max(0, i - 1)]);
+        const b = f(cells[Math.min(HEAD - 1, i)]);
+        lead[i] = Math.max(a, b);
+        if (lead[i] > max) max = lead[i];
+      }
+      return { lead, max };
+    };
+    const fin = (v, out) => (Math.abs(v) === Infinity ? -H : out);
+    return {
+      left: lines(lef, (v) => fin(v, H - v)),
+      right: lines(rig, (v) => fin(v, v + 1 - H)),
+      top: lines(top, (v) => fin(v, H - v)),
+      bottom: lines(bot, (v) => fin(v, v + 1 - H)),
+    };
+  })();
   let impLead = 14;
+  let impProfile = null;
 
   // Damage 15+: the eyes hang out of their sockets on optic threads,
   // each a damped pendulum blown around by the same skin lag; different
@@ -495,6 +532,8 @@ const Goblin = (() => {
   // speed threshold: wide eyes and a pursed mouth come in first, then
   // flapping lips and the eye gaps as the stretch deepens.
   function bobVal(now) {
+    const it = now - impactAt;
+    if (it >= 0 && it < IMP_MS) return 0;
     const bobSpeed = state === 'talking' ? 260 : state === 'listening' ? 400 : 900;
     return Math.round(Math.sin(now / bobSpeed) * (state === 'idle' ? 0.6 : 1));
   }
@@ -691,16 +730,16 @@ const Goblin = (() => {
   // the trailing side lags on a 60/40 linear-cubic profile, rippling and
   // thinning toward the tip. When the tail outgrows the pad the whole
   // sock advances a little instead of clipping. A wall impact crushes
-  // like an egg, in the hit edge's axis-aligned frame frozen at impact:
-  // a crush front eats in from the glass, consumed material accretes
-  // into a thin pack spreading along the wall, and everything behind
-  // the front rides in undeformed until the front reaches it, so a
-  // light hit flattens only the contact side.
+  // like a rubber ball, in the hit edge's axis-aligned frame frozen at
+  // impact: a crush front eats in from the sprite's apex, and each
+  // column whose silhouette lead the front has passed packs flat with
+  // its lead exactly on the glass, so the contact patch is flat and
+  // widens with depth while untouched columns ride in rigid.
   function deform(now) {
     const sp = Math.hypot(lagX, lagY);
     const E = extension(sp);
     const it = now - impactAt;
-    const env = it >= 0 && it < 900
+    const env = it >= 0 && it < IMP_MS
       ? Math.min(1, it / 40) * Math.exp(-Math.max(0, it - 90) / impactTau)
       : 0;
     const sqz = impactK * env;
@@ -717,7 +756,7 @@ const Goblin = (() => {
     const offS = 1 + 0.3 * sq;
     const crush = HEAD * sqz;
     const pack = Math.min(crush, Math.max(1.2, 0.12 * crush));
-    const front = 14 - crush;
+    const front = impLead - crush;
     // The crush plane tracks the physical wall in screen space, so the
     // smushed side stays glued to the glass even if the window is
     // yanked away before the splat finishes.
@@ -747,13 +786,17 @@ const Goblin = (() => {
       if (crush > 0.05) {
         const pw = -(wx * impNX + wy * impNY);
         const ow = wx * impNY - wy * impNX;
-        const f = Math.min(1, Math.max(0, (pw - front) / Math.max(0.5, impLead - front)));
-        const packed = plane - pack * (1 - f);
-        const rigid = pw + (plane - 14) + (crush - pack);
+        const li = impNX !== 0 ? ((n / VN) | 0) : (n % VN);
+        const L = impProfile ? impProfile[li] : impLead;
+        const cLocal = Math.max(0, crush - (impLead - L));
+        const g = Math.min(1, Math.max(0, (pw - front) / Math.max(0.5, cLocal)));
+        const tC = Math.min(pack, Math.max(0.5, 0.12 * cLocal));
+        const packed = plane - tC * (1 - g);
+        const rigid = pw + (plane - impLead) + (crush - pack);
         let m = Math.min(1, Math.max(0, (pw - front + 2) / 4));
-        m = m * m * (3 - 2 * m);
+        m = m * m * (3 - 2 * m) * Math.min(1, cLocal / 1.5);
         const pw2 = Math.min(plane, rigid * (1 - m) + packed * m);
-        const spread = 1 + 1.15 * (crush / HEAD) * Math.pow(f, 0.7);
+        const spread = 1 + 1.15 * (crush / HEAD) * Math.pow(g, 0.7);
         wx = -impNX * pw2 + impNY * ow * spread;
         wy = -impNY * pw2 - impNX * ow * spread;
       }
@@ -824,7 +867,7 @@ const Goblin = (() => {
     // burns GPU for identical frames. Physics above still ran.
     const it = now - impactAt;
     const calm = extension(Math.hypot(lagX, lagY)) < 0.01 && Math.abs(sq) < 0.01
-      && flutter < 0.05 && (it < 0 || it > 900);
+      && flutter < 0.05 && (it < 0 || it > IMP_MS);
     const sig = `${state}|${damage}|${badge}|${emote}|${bobVal(now)}|${look}|${now < blinkUntil}`
       + `|${now < twitchUntil}|${now < shakeUntil}|${shownLevel.toFixed(2)}`
       + `|${Math.round(lagX / 20)},${Math.round(lagY / 20)}`
@@ -865,7 +908,6 @@ const Goblin = (() => {
       impactK = tm.k;
       impactTau = tm.tau;
       impactWall = typeof wall === 'number' ? wall : null;
-      impLead = EDGE_LEAD[edge] || 14;
       const ax = EDGE_AXES[edge];
       if (ax) {
         impNX = ax[0];
@@ -877,6 +919,9 @@ const Goblin = (() => {
         impNX = 0;
         impNY = dirY < 0 ? -1 : 1;
       }
+      const prof = EDGE_PROFILES[impNX > 0 ? 'left' : impNX < 0 ? 'right' : impNY > 0 ? 'top' : 'bottom'];
+      impProfile = prof.lead;
+      impLead = prof.max;
       skin.impulse(Math.min(9, (speed || 900) / 320));
     },
     getDamage: () => damage,
