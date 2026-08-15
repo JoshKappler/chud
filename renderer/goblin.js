@@ -197,6 +197,10 @@ const Goblin = (() => {
   // base-excited spring on the motion's real derivative chain, squash
   // pumps on braking, flutter reads snap, crackle and pop.
   const skin = SkinPhys.createSkin();
+  const DBG = typeof location !== 'undefined' && /debug=1/.test(location.search);
+  let dbgFrames = 0;
+  let dbgMaxGap = 0;
+  let dbgAt = 0;
   let lagX = 0, lagY = 0;
   let sq = 0;
   let flutter = 0;
@@ -762,8 +766,19 @@ const Goblin = (() => {
   }
 
   function render(now) {
-    const dt = Math.min(0.05, Math.max(0.001, (now - lastFrameT) / 1000));
+    const rawGap = now - lastFrameT;
+    const dt = Math.min(0.05, Math.max(0.001, rawGap / 1000));
     lastFrameT = now;
+    if (DBG) {
+      dbgFrames++;
+      if (rawGap > dbgMaxGap) dbgMaxGap = rawGap;
+      if (now - dbgAt > 1000) {
+        console.log(`[fps] n=${dbgFrames} maxgap=${Math.round(dbgMaxGap)}ms`);
+        dbgFrames = 0;
+        dbgMaxGap = 0;
+        dbgAt = now;
+      }
+    }
 
     // Window velocity over a ~40ms baseline: per-frame sampling beats
     // against the IPC move rate and reads as alternating zero/double

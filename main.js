@@ -60,7 +60,9 @@ function createWindow() {
   const damage = process.env.CHUD_DAMAGE || '';
   const page = process.env.CHUD_PAGE || 'index';
   const edge = process.env.CHUD_EDGE || 'punch';
-  const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}&edge=${edge}&seed=7` : '';
+  const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}&edge=${edge}&seed=7`
+    : (process.env.CHUD_DEBUG ? '?debug=1' : '');
+  if (process.env.CHUD_DEBUG) win.webContents.on('console-message', (e, l, m) => console.log('[r]', m));
   win.loadURL(`chud://app/renderer/${page}.html${qs}`);
   if (!SCREENSHOT) {
     drift.start(win, pad);
