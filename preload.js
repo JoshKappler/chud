@@ -4,7 +4,6 @@ contextBridge.exposeInMainWorld('chud', {
   mint: () => ipcRenderer.invoke('mint-session'),
   tool: (name, args) => ipcRenderer.invoke('tool-call', { name, args }),
   getConfig: () => ipcRenderer.invoke('get-config'),
-  moveBy: (dx, dy) => ipcRenderer.send('win-move-by', { dx, dy }),
   dragState: (v) => ipcRenderer.send('drag-state', v),
   grab: () => ipcRenderer.invoke('win-grab'),
   splat: () => ipcRenderer.send('splat-here'),

@@ -209,7 +209,9 @@
   const cell = cfg.spriteScale || 4;
   const onHead = (e) => e.offsetX >= 28 * cell && e.offsetX < 56 * cell
     && e.offsetY >= 28 * cell && e.offsetY < 56 * cell;
+  const DBG = /debug=1/.test(location.search);
   canvas.addEventListener('mousedown', (e) => {
+    if (DBG) console.log(`[grab] btn=${e.button} onHead=${onHead(e)}`);
     if (e.button !== 0 || !onHead(e)) return;
     const d = { x: e.screenX, y: e.screenY, t: Date.now(), wasFlinging: false };
     down = d;
@@ -218,18 +220,14 @@
       if (down === d) down.wasFlinging = r.wasFlinging;
     });
   });
+  // The main process moves the window from its own cursor poll while
+  // dragging; mousemove here only tells a tap from a drag.
   window.addEventListener('mousemove', (e) => {
     if (!down) return;
-    const dx = e.screenX - down.x;
-    const dy = e.screenY - down.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) dragged = true;
-    if (dragged) {
-      window.chud.moveBy(dx, dy);
-      down.x = e.screenX;
-      down.y = e.screenY;
-    }
+    if (Math.abs(e.screenX - down.x) + Math.abs(e.screenY - down.y) > 3) dragged = true;
   });
   window.addEventListener('mouseup', () => {
+    if (DBG) console.log(`[up] held=${!!down} dragged=${dragged}`);
     if (!down) return;
     const cleanTap = !dragged && Date.now() - down.t < 400
       && !down.wasFlinging && Date.now() - lastPunch > 500;

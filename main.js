@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, protocol, net, screen, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, protocol, net, screen, systemPreferences, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -26,6 +26,10 @@ function loadConfig() {
 
 loadEnvFile();
 const config = loadConfig();
+// open(1) launches without the caller's env, so debug also arms via a
+// marker file; the log goes to a file because launchd owns stdout.
+const DEBUG = !!process.env.CHUD_DEBUG || fs.existsSync('/tmp/chud-debug-on');
+const dbgLog = (m) => { try { fs.appendFileSync('/tmp/chud-debug.log', m + '\n'); } catch (e) { /* debug only */ } };
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'chud', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
@@ -61,8 +65,8 @@ function createWindow() {
   const page = process.env.CHUD_PAGE || 'index';
   const edge = process.env.CHUD_EDGE || 'punch';
   const qs = SCREENSHOT ? `?pose=${pose}&badge=${badge}&emote=${emote}&damage=${damage}&edge=${edge}&seed=7`
-    : (process.env.CHUD_DEBUG ? '?debug=1' : '');
-  if (process.env.CHUD_DEBUG) win.webContents.on('console-message', (e, l, m) => console.log('[r]', m));
+    : (DEBUG ? '?debug=1' : '');
+  if (DEBUG) win.webContents.on('console-message', (e, l, m) => dbgLog('[r] ' + m));
   win.loadURL(`chud://app/renderer/${page}.html${qs}`);
   if (!SCREENSHOT) {
     drift.start(win, pad);
@@ -95,11 +99,33 @@ function startCursorPoll(pad) {
     if (want !== ignoring) {
       ignoring = want;
       win.setIgnoreMouseEvents(want);
+      if (DEBUG) dbgLog(`[ignore] ${want}`);
     }
-  }, 50);
+  }, 16);
 }
 
 app.whenReady().then(async () => {
+  // macOS App Nap coalesces main-process timers to ~100ms when the app
+  // looks inactive, and a frameless never-activated window counts as
+  // inactive; the drift tick and drag poll live on those timers, so a
+  // napped goblin flies and drags at 10fps.
+  powerSaveBlocker.start('prevent-app-suspension');
+  if (DEBUG) {
+    let hb = Date.now();
+    let worst = 0;
+    let n = 0;
+    setInterval(() => {
+      const t = Date.now();
+      const gap = t - hb;
+      hb = t;
+      if (gap > worst) worst = gap;
+      if (++n >= 120) {
+        dbgLog(`[tick8] worst=${worst}ms`);
+        worst = 0;
+        n = 0;
+      }
+    }, 8);
+  }
   protocol.handle('chud', (req) => {
     const url = new URL(req.url);
     const file = path.normalize(path.join(ROOT, decodeURIComponent(url.pathname)));
@@ -123,7 +149,8 @@ app.whenReady().then(async () => {
   });
 
   createWindow();
-  if (!SCREENSHOT) splat.init();
+  const noSplat = process.env.CHUD_NOSPLAT || fs.existsSync('/tmp/chud-nosplat-on');
+  if (!SCREENSHOT && !noSplat) splat.init();
 });
 
 app.on('window-all-closed', () => app.quit());
@@ -154,8 +181,6 @@ app.on('before-quit', () => {
   wakewatch.stop();
   drift.stop();
 });
-
-ipcMain.on('win-move-by', (e, { dx, dy }) => drift.dragMove(dx, dy));
 
 ipcMain.on('splat-here', () => {
   if (!win || win.isDestroyed()) return;
