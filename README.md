@@ -63,8 +63,9 @@ window and every Space.
   glass crushes flat first and the crush eats deeper the harder the hit,
   cheek and chin flattening before the forehead ever arrives, down to a
   smear a few pixels thick and twice his usual breadth. A hard bounce
-  sticks him to the wall while the crush plays out, he recoils, and only
-  then bounces away. Twenty damage stages: bruises, cuts and blood
+  pins him to the wall for the whole splat, crush-in to fully recovered
+  face, before he departs; yank him off mid-splat and the crushed side
+  stays glued to the glass until it heals. Twenty damage stages: bruises, cuts and blood
   through stage 9, the skin falls away patch by patch from stage 10, his
   eyes pop from their sockets at 15 and swing on their optic threads
   until only his skull is left at 20, cracked crown, gap teeth and empty

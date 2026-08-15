@@ -174,17 +174,17 @@
   // Each hit plays the crunch plus the preset grunt for the new damage
   // stage. Punches splat blood behind him; wall bounces splat at the wall
   // (the main process spawns that one at the impact point).
-  // Screams: 4 severity bands x 4 variants, never the same file twice in
-  // a row.
-  let lastScream = '';
+  // Screams: 4 severity bands x 4 takes; a take never repeats until two
+  // other takes from its band have played.
+  const screamHist = {};
   function pickScream(damage) {
     const band = Math.min(4, Math.max(1, Math.ceil(damage / 5)));
-    let f;
-    do {
-      f = `scream${band}-${1 + Math.floor(Math.random() * 4)}.wav`;
-    } while (f === lastScream);
-    lastScream = f;
-    return f;
+    const hist = screamHist[band] || (screamHist[band] = []);
+    const takes = [1, 2, 3, 4].filter((v) => !hist.includes(v));
+    const v = takes[Math.floor(Math.random() * takes.length)];
+    hist.unshift(v);
+    if (hist.length > 2) hist.pop();
+    return `scream${band}-${v}.wav`;
   }
 
   function ouch(fromBounce) {
@@ -195,7 +195,7 @@
     VoiceFX.playUrl(`chud://app/assets/grunts/${pickScream(d)}`).catch(() => {});
   }
   window.chud.onBounceHurt((d) => {
-    Goblin.impact(d && d.speed, d && d.edge);
+    Goblin.impact(d && d.speed, d && d.edge, d ? d.wall : null);
     ouch(true);
   });
 

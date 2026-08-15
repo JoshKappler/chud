@@ -204,6 +204,7 @@ const Goblin = (() => {
   let impactAt = -1e9;
   let impactK = 0;
   let impactTau = 150;
+  let impactWall = null;
   let impNX = -1;
   let impNY = 0;
   const EDGE_AXES = { left: [1, 0], right: [-1, 0], top: [0, 1], bottom: [0, -1] };
@@ -704,6 +705,18 @@ const Goblin = (() => {
     const crush = HEAD * sqz;
     const pack = Math.min(crush, Math.max(1.2, 0.12 * crush));
     const front = 14 - crush;
+    // The crush plane tracks the physical wall in screen space, so the
+    // smushed side stays glued to the glass even if the window is
+    // yanked away before the splat finishes.
+    let plane = 14;
+    if (crush > 0.05 && impactWall !== null) {
+      let dW;
+      if (impNX < 0) dW = (impactWall - (window.screenX + (PAD + HEAD) * S)) / S;
+      else if (impNX > 0) dW = ((window.screenX + PAD * S) - impactWall) / S;
+      else if (impNY > 0) dW = ((window.screenY + PAD * S) - impactWall) / S;
+      else dW = (impactWall - (window.screenY + (PAD + HEAD) * S)) / S;
+      plane = 14 + Math.max(0, Math.min(24, dW)) * Math.min(1, crush / 3);
+    }
     for (let n = 0; n < VN * VN; n++) {
       const bx = ident[n * 2] - c;
       const by = ident[n * 2 + 1] - c;
@@ -721,14 +734,12 @@ const Goblin = (() => {
       if (crush > 0.05) {
         const pw = -(wx * impNX + wy * impNY);
         const ow = wx * impNY - wy * impNX;
-        let pw2;
-        let f = 0;
-        if (pw >= front) {
-          f = Math.min(1, (pw - front) / crush);
-          pw2 = 14 - pack * (1 - f);
-        } else {
-          pw2 = pw + (crush - pack);
-        }
+        const f = Math.min(1, Math.max(0, (pw - front) / crush));
+        const packed = plane - pack * (1 - f);
+        const rigid = pw + (plane - 14) + (crush - pack);
+        let m = Math.min(1, Math.max(0, (pw - front + 2) / 4));
+        m = m * m * (3 - 2 * m);
+        const pw2 = Math.min(plane, rigid * (1 - m) + packed * m);
         const spread = 1 + 1.15 * (crush / HEAD) * Math.pow(f, 0.7);
         wx = -impNX * pw2 + impNY * ow * spread;
         wy = -impNY * pw2 - impNX * ow * spread;
@@ -806,10 +817,12 @@ const Goblin = (() => {
     setEmote: (s) => { emote = s; },
     setHealSeconds: (s) => { healMs = Math.max(1, s) * 1000; },
     setMotion: (x, y) => { gvManual = true; gvx = x; gvy = y; },
-    impact: (speed, edge) => {
+    impact: (speed, edge, wall) => {
       impactAt = performance.now();
-      impactK = Math.min(1, Math.max(0.2, ((speed || 900) - 300) / 2300));
-      impactTau = 40 + 40 * impactK;
+      const tm = SkinPhys.impactTiming(speed);
+      impactK = tm.k;
+      impactTau = tm.tau;
+      impactWall = typeof wall === 'number' ? wall : null;
       const ax = EDGE_AXES[edge];
       if (ax) {
         impNX = ax[0];

@@ -114,7 +114,10 @@ app.whenReady().then(async () => {
   });
   drift.setOnBounce((hit) => {
     splat.show(hit.edge, hit.ix, hit.iy, hit.wa, hit.speed);
-    if (win && !win.isDestroyed()) win.webContents.send('bounce-hurt', { speed: hit.speed, edge: hit.edge });
+    if (win && !win.isDestroyed()) {
+      const wall = hit.edge === 'left' || hit.edge === 'right' ? hit.ix : hit.iy;
+      win.webContents.send('bounce-hurt', { speed: hit.speed, edge: hit.edge, wall });
+    }
   });
 
   createWindow();
