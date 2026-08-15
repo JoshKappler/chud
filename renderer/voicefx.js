@@ -53,8 +53,10 @@ const VoiceFX = (() => {
     }
   }
 
-  let gruntSrc = null;
   let playSeq = 0;
+  let cur = null;
+  let pend = null;
+  const XFADE_AT = 0.75;
   const bufCache = new Map();
 
   function loadBuffer(url) {
@@ -68,22 +70,41 @@ const VoiceFX = (() => {
     return bufCache.get(url);
   }
 
-  // A new call silences the current line at once and supersedes any older
-  // call still decoding, so the freshest impact always wins.
+  // Lines chain instead of cutting: the playing line holds to 75% of its
+  // length, then crossfades into the newest call over its remaining tail,
+  // so repeated slams read as one continuous scream. A lone line plays
+  // out in full; only the freshest not-yet-started line is kept queued.
   async function playUrl(url) {
     const seq = ++playSeq;
-    if (gruntSrc) {
-      try { gruntSrc.stop(); } catch (e) { /* already ended */ }
-      gruntSrc = null;
-    }
     const buf = await loadBuffer(url);
     if (seq !== playSeq) return;
+    const now = ctx.currentTime;
+    if (pend && now >= pend.start) { cur = pend; pend = null; }
+    if (cur && now >= cur.start + cur.dur) cur = null;
     const src = ctx.createBufferSource();
-    gruntSrc = src;
+    const g = ctx.createGain();
     src.buffer = buf;
-    src.connect(bus);
-    src.start();
-    return new Promise((r) => { src.onended = r; });
+    src.connect(g);
+    g.connect(bus);
+    const done = new Promise((r) => { src.onended = () => { g.disconnect(); r(); }; });
+    if (!cur) {
+      src.start(now);
+      cur = { src, g, start: now, dur: buf.duration };
+      return done;
+    }
+    const at = Math.max(now, cur.start + cur.dur * XFADE_AT);
+    const end = cur.start + cur.dur;
+    if (pend) {
+      try { pend.src.stop(); } catch (e) { /* never started */ }
+      pend.g.disconnect();
+    }
+    cur.g.gain.cancelAndHoldAtTime(at);
+    cur.g.gain.linearRampToValueAtTime(0, end);
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(1, end);
+    src.start(at);
+    pend = { src, g, start: at, dur: buf.duration };
+    return done;
   }
 
   return {
