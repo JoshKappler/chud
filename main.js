@@ -156,6 +156,8 @@ app.whenReady().then(async () => {
       win.webContents.send('bounce-hurt', { speed: hit.speed, edge: hit.edge, wall });
     }
   });
+  // sliding contact leaves blood without a fresh crush or hurt
+  drift.setOnSmear((hit) => splat.show(hit.edge, hit.ix, hit.iy, hit.wa, hit.speed));
 
   createWindow();
   const noSplat = process.env.CHUD_NOSPLAT || fs.existsSync('/tmp/chud-nosplat-on');
