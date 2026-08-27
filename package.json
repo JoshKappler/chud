@@ -8,6 +8,8 @@
     "start": "electron .",
     "get-model": "bash scripts/get-model.sh",
     "say": "node scripts/say.js",
+    "web:build": "node web/build.mjs",
+    "web:lines": "node scripts/make-weblines.js",
     "shot": "CHUD_SCREENSHOT=/tmp/chud-shot.png electron ."
   },
   "dependencies": {

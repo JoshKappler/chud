@@ -6,6 +6,8 @@ work, and reports back when they finish.
 
 You can also beat him up. He has 20 damage stages and stays grumpy until he heals.
 
+A brainless web build lives at [chud.joshuakappler.com](https://chud.joshuakappler.com): no API keys, canned replies, same beatings.
+
 ![chud taking damage from healthy to bare skull](assets/readme/destruction.gif)
 
 ## How he works
