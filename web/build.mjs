@@ -11,6 +11,7 @@ mkdirSync(DIST, { recursive: true });
 const copies = [
   ['web/index.html', 'index.html'],
   ['web/app.js', 'app.js'],
+  ['web/fling.js', 'fling.js'],
   ['web/lines.json', 'lines.json'],
   ['web/lines', 'lines'],
   ['lib/pitchcore.js', 'lib/pitchcore.js'],

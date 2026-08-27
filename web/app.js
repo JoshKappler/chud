@@ -1,14 +1,21 @@
-// Web build wiring: no Electron, no mic, no live model. He renders, he
-// takes hits, and he answers from a bank of pre-rendered lines.
+// Web build wiring: no Electron, no mic, no live model. He renders on a
+// fake desktop, gets flung around, takes hits, and answers from a bank
+// of pre-rendered lines.
 (async () => {
   const cfg = { spriteScale: 4, healSeconds: 10, voiceFx: { enabled: true, pitch: 0.8, gravel: 0.35 } };
   const canvas = document.getElementById('goblin');
+  const field = document.getElementById('field');
   const subtitle = document.getElementById('subtitle');
   const talkBtn = document.getElementById('talk');
 
   Goblin.setScale(cfg.spriteScale);
   Goblin.setHealSeconds(cfg.healSeconds);
   Goblin.start();
+
+  const clock = document.getElementById('clock');
+  const setClock = () => { clock.textContent = new Date().toTimeString().slice(0, 5); };
+  setClock();
+  setInterval(setClock, 30000);
 
   const lines = await fetch('lines.json').then((r) => r.json());
   let lineAt = Math.floor(Math.random() * lines.length);
@@ -39,14 +46,15 @@
         else if (now - quietSince > 350) {
           quietSince = 0;
           Goblin.setState(Goblin.getDamage() > 0 ? 'grumpy' : 'idle');
-          subtitle.textContent = '';
         }
       }
     });
   }
+  field.addEventListener('pointerdown', ensureAudio);
 
   function crunch() {
     const ctx = VoiceFX.getCtx();
+    if (!ctx) return;
     const samples = CrunchCore.renderCrunch(ctx.sampleRate);
     const buf = ctx.createBuffer(1, samples.length, ctx.sampleRate);
     buf.copyToChannel(samples, 0);
@@ -70,29 +78,25 @@
   }
 
   const EDGES = ['left', 'right', 'top', 'bottom'];
-  function ouch() {
+  function ouch(fromWall) {
     ensureAudio();
     const d = Math.min(20, Goblin.getDamage() + 1);
     Goblin.setDamage(d);
-    Goblin.impact(600 + Math.random() * 900, EDGES[Math.floor(Math.random() * 4)], null);
+    if (!fromWall) Goblin.impact(600 + Math.random() * 900, EDGES[Math.floor(Math.random() * 4)], null);
     crunch();
     VoiceFX.playUrl(`assets/grunts/${pickScream(d)}`).catch(() => {});
   }
 
-  // The canvas carries a transparent margin around the 28-cell head for
-  // the stretch tail; only the head square takes hits.
-  function onHead(e) {
-    const r = canvas.getBoundingClientRect();
-    const cx = ((e.clientX - r.left) / r.width) * 84;
-    const cy = ((e.clientY - r.top) / r.height) * 84;
-    return cx >= 28 && cx < 56 && cy >= 28 && cy < 56;
-  }
-  canvas.addEventListener('pointerdown', (e) => {
-    if (onHead(e)) ouch();
-  });
-  canvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    if (onHead(e)) ouch();
+  Fling.init({
+    canvas,
+    field,
+    hooks: {
+      onPunch: () => ouch(false),
+      onSlam: (edge, speed, hurt) => {
+        Goblin.impact(speed, edge, null);
+        if (hurt) ouch(true);
+      },
+    },
   });
 
   talkBtn.addEventListener('click', () => {
@@ -100,7 +104,9 @@
     const line = lines[lineAt % lines.length];
     lineAt++;
     subtitle.textContent = line.text;
-    VoiceFX.playUrl(`lines/${line.file}`).catch(() => {
+    VoiceFX.playUrl(`lines/${line.file}`).then(() => {
+      if (subtitle.textContent === line.text) subtitle.textContent = '';
+    }).catch(() => {
       subtitle.textContent = '(he refuses to load)';
     });
   });
