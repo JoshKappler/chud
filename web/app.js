@@ -77,10 +77,22 @@
     return `scream${band}-${v}.wav`;
   }
 
+  const splat = SplatCore.attach(document.getElementById('splat'), () => [field.clientWidth, field.clientHeight]);
+  window.addEventListener('resize', () => splat.fit());
+  let lastSplatAt = 0;
+  function blood(spec) {
+    const now = Date.now();
+    if (now - lastSplatAt < 60) return;
+    lastSplatAt = now;
+    splat.addSplat({ ...spec, seed: Math.floor(Math.random() * 1e6) });
+  }
+
+  // Punches land 2 stages so a determined mashing reaches the skull; the
+  // desktop's 1 per hit walks too slowly against the web heal timer.
   const EDGES = ['left', 'right', 'top', 'bottom'];
-  function ouch(fromWall) {
+  function ouch(hits, fromWall) {
     ensureAudio();
-    const d = Math.min(20, Goblin.getDamage() + 1);
+    const d = Math.min(20, Goblin.getDamage() + hits);
     Goblin.setDamage(d);
     if (!fromWall) Goblin.impact(600 + Math.random() * 900, EDGES[Math.floor(Math.random() * 4)], null);
     crunch();
@@ -91,11 +103,18 @@
     canvas,
     field,
     hooks: {
-      onPunch: () => ouch(false),
-      onSlam: (edge, speed, hurt) => {
-        Goblin.impact(speed, edge, null);
-        if (hurt) ouch(true);
+      onPunch: (x, y) => {
+        ouch(2, false);
+        blood({ edge: 'punch', x, y });
       },
+      onSlam: (edge, speed, hurt, ix, iy) => {
+        Goblin.impact(speed, edge, null);
+        if (hurt) {
+          ouch(1, true);
+          blood({ edge, x: ix, y: iy, sp: speed });
+        }
+      },
+      onSmear: (edge, ix, iy, speed) => blood({ edge, x: ix, y: iy, sp: speed }),
     },
   });
 

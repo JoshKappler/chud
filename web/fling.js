@@ -9,6 +9,7 @@ const Fling = (() => {
   const REBOUND = 0.4;
   const AIR = 1.1;
   const SMEAR_FRICTION = 2.5;
+  const SMEAR_MIN = 300;
   const IMPACT_MIN = 350;
   const HURT_MIN = 900;
   const HURT_COOLDOWN_MS = 250;
@@ -41,12 +42,21 @@ const Fling = (() => {
     canvas.style.transform = `translate(${px - head()}px, ${py - head()}px)`;
   }
 
+  function wallPoint(edge) {
+    const w = head();
+    if (edge === 'left') return [0, py + w / 2];
+    if (edge === 'right') return [field.clientWidth, py + w / 2];
+    if (edge === 'top') return [px + w / 2, 0];
+    return [px + w / 2, field.clientHeight];
+  }
+
   function slam(edge, vn) {
     const nv = vn * norm();
     if (nv < IMPACT_MIN) return false;
     const hurt = nv > HURT_MIN && Date.now() - lastHurtAt > HURT_COOLDOWN_MS;
     if (hurt) lastHurtAt = Date.now();
-    hooks.onSlam(edge, Math.min(nv, FLING_CAP), hurt);
+    const [ix, iy] = wallPoint(edge);
+    hooks.onSlam(edge, Math.min(nv, FLING_CAP), hurt, ix, iy);
     return hurt;
   }
 
@@ -125,6 +135,11 @@ const Fling = (() => {
         vy *= Math.exp(-SMEAR_FRICTION * dt);
         py = Math.min(Math.max(py + vy * dt, 0), H - w);
       }
+      const vt = Math.abs(wallC.edge === 'top' || wallC.edge === 'bottom' ? vx : vy);
+      if (vt * norm() > SMEAR_MIN && hooks.onSmear) {
+        const [ix, iy] = wallPoint(wallC.edge);
+        hooks.onSmear(wallC.edge, ix, iy, vt * norm() * 0.35);
+      }
       if (Date.now() >= wallC.until) {
         if (wallC.edge === 'left') vx = wallC.out;
         else if (wallC.edge === 'right') vx = -wallC.out;
@@ -195,7 +210,8 @@ const Fling = (() => {
 
   function onHead(x, y) {
     const w = head();
-    return x >= px && x < px + w && y >= py && y < py + w;
+    const p = 8;
+    return x >= px - p && x < px + w + p && y >= py - p && y < py + w + p;
   }
 
   function onDown(e) {
@@ -224,8 +240,13 @@ const Fling = (() => {
     const g = grab;
     grab = null;
     contact.clear();
-    if (!g.armed && Date.now() - g.downT < 400) {
-      hooks.onPunch();
+    // A punch is any short press without a real drag: mashing and finger
+    // taps wobble a few pixels, so the bar sits well above the 3px that
+    // arms the tether.
+    const moved = Math.abs(g.cx - g.ax) + Math.abs(g.cy - g.ay);
+    if (moved < 14 && Date.now() - g.downT < 400) {
+      const w = head();
+      hooks.onPunch(px + w / 2, py + w / 2);
       return;
     }
     const speed = Math.hypot(vx, vy) * norm();
@@ -254,7 +275,8 @@ const Fling = (() => {
     field.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const [x, y] = localXY(e);
-      if (onHead(x, y)) hooks.onPunch();
+      const w = head();
+      if (onHead(x, y)) hooks.onPunch(px + w / 2, py + w / 2);
     });
     window.addEventListener('resize', () => {
       px = Math.min(Math.max(px, 0), Math.max(0, field.clientWidth - head()));

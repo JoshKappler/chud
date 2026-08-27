@@ -42,6 +42,8 @@
     .file::before { content: ''; position: absolute; top: 7px; left: 5px; right: 5px; height: 2px;
       background: #4a5731; box-shadow: 0 6px 0 #4a5731, 0 12px 0 #4a5731; }
 
+    #splat { image-rendering: pixelated; position: absolute; inset: 0;
+      width: 100%; height: 100%; pointer-events: none; z-index: 2; }
     #goblin { image-rendering: pixelated; position: absolute; left: 0; top: 0;
       width: min(336px, 72vmin); height: auto; cursor: grab; z-index: 3; touch-action: none; }
     #goblin:active { cursor: grabbing; }
@@ -92,6 +94,7 @@
       <div class="icon"><div class="file"></div><span>chud.exe</span></div>
     </div>
     <p id="subtitle"></p>
+    <canvas id="splat"></canvas>
     <canvas id="goblin" width="336" height="336"></canvas>
   </div>
   <div id="dock">
@@ -105,6 +108,7 @@
   <script src="lib/skinphys.js"></script>
   <script src="renderer/goblin.js"></script>
   <script src="renderer/voicefx.js"></script>
+  <script src="renderer/splatcore.js"></script>
   <script src="fling.js"></script>
   <script src="app.js"></script>
 </body>

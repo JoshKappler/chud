@@ -19,6 +19,7 @@ const copies = [
   ['lib/skinphys.js', 'lib/skinphys.js'],
   ['renderer/goblin.js', 'renderer/goblin.js'],
   ['renderer/voicefx.js', 'renderer/voicefx.js'],
+  ['renderer/splatcore.js', 'renderer/splatcore.js'],
   ['assets/grunts', 'assets/grunts'],
 ];
 for (const [from, to] of copies) {

@@ -1,0 +1,244 @@
+// Persistent pixel blood, shared by the desktop overlay windows and the
+// web build: one backing pixel per cell, CSS-upscaled, repainting only
+// when content changes. Each splat keeps its own seeded layout, droplets,
+// drips and fade clock; k runs 0 at a graze to 1 at a full fling.
+(function (root, factory) {
+  const api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.SplatCore = api;
+})(this, function () {
+  const S = 4;
+  const COLORS = ['#b00e22', '#7c0817', '#4d040d'];
+  const BONE = ['#f5efd7', '#d8cfb2'];
+  const SKIN = ['#57a63f', '#37702a', '#8fd457'];
+
+  function makeRng(seed0) {
+    let seed = seed0 | 0;
+    return () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function attach(canvas, sizeOf) {
+    const ctx = canvas.getContext('2d');
+    let CW = 0;
+    let CH = 0;
+    function fit() {
+      const [w, h] = sizeOf();
+      CW = Math.floor(w / S);
+      CH = Math.floor(h / S);
+      canvas.width = CW;
+      canvas.height = CH;
+    }
+    fit();
+
+    const splats = [];
+    let running = false;
+
+    function addSplat(spec) {
+      const edge = spec.edge || 'punch';
+      const rng = makeRng(spec.seed || 1);
+      const k = edge === 'punch' ? 0.35 : Math.min(1, Math.max(0, (spec.sp - 300) / 2200));
+      let cx = Math.max(2, Math.min(CW - 3, Math.round(spec.x / S)));
+      let cy = Math.max(2, Math.min(CH - 3, Math.round(spec.y / S)));
+      if (edge === 'left') cx = 2;
+      if (edge === 'right') cx = CW - 3;
+      if (edge === 'top') cy = 2;
+      if (edge === 'bottom') cy = CH - 3;
+
+      const dots = [];
+      const nDots = Math.round(26 + 44 * k);
+      const R0 = 65 * 0.42;
+      for (let i = 0; i < nDots; i++) {
+        const ang = rng() * Math.PI * 2;
+        const r = rng() * rng() * R0;
+        let x = cx + Math.cos(ang) * r;
+        let y = cy + Math.sin(ang) * r;
+        if (edge === 'left') x = cx + Math.abs(Math.cos(ang)) * r * 0.9;
+        if (edge === 'right') x = cx - Math.abs(Math.cos(ang)) * r * 0.9;
+        if (edge === 'top') y = cy + Math.abs(Math.sin(ang)) * r * 0.9;
+        if (edge === 'bottom') y = cy - Math.abs(Math.sin(ang)) * r * 0.9;
+        dots.push([Math.round(x), Math.round(y), COLORS[Math.floor(rng() * 3)]]);
+      }
+      // thick smear along the wall itself, wider and deeper the harder he hit
+      if (edge !== 'punch') {
+        const half = 5 + Math.round(7 * k);
+        for (let i = -half; i <= half; i++) {
+          if (rng() < 0.85) {
+            const t = Math.floor(rng() * (2 + 2.5 * k));
+            for (let d = 0; d <= t; d++) {
+              if (edge === 'left') dots.push([d, Math.round(cy + i), COLORS[d === 0 ? 1 : 0]]);
+              if (edge === 'right') dots.push([CW - 1 - d, Math.round(cy + i), COLORS[d === 0 ? 1 : 0]]);
+              if (edge === 'top') dots.push([Math.round(cx + i), d, COLORS[d === 0 ? 1 : 0]]);
+              if (edge === 'bottom') dots.push([Math.round(cx + i), CH - 1 - d, COLORS[d === 0 ? 1 : 0]]);
+            }
+          }
+        }
+      }
+      const drips = [];
+      const nDrips = 1 + Math.round(rng() * (2 + 3 * k));
+      for (let i = 0; i < nDrips; i++) {
+        const [dx, dy] = dots[Math.floor(rng() * dots.length)];
+        drips.push({ x: dx, y: dy, len: 4 + rng() * 9 });
+      }
+
+      // flying droplets: sprayed away from the wall, pulled down by gravity,
+      // frozen into stains where they land
+      const drops = [];
+      const nDrops = Math.round((8 + rng() * 7) * (0.7 + 1.6 * k));
+      for (let i = 0; i < nDrops; i++) {
+        let ang;
+        if (edge === 'left') ang = (rng() - 0.5) * 1.8;
+        else if (edge === 'right') ang = Math.PI + (rng() - 0.5) * 1.8;
+        else if (edge === 'top') ang = Math.PI / 2 + (rng() - 0.5) * 1.8;
+        else if (edge === 'bottom') ang = -Math.PI / 2 + (rng() - 0.5) * 1.8;
+        else ang = rng() * Math.PI * 2;
+        const sp = (25 + rng() * 120) * (0.8 + 0.7 * k);
+        drops.push({
+          x: cx, y: cy,
+          vx: Math.cos(ang) * sp,
+          vy: Math.sin(ang) * sp,
+          life: 0.25 + rng() * 0.5,
+          c: COLORS[Math.floor(rng() * 2)],
+          dead: false,
+        });
+      }
+
+      // shards: pale bone chips plus skin-colored flakes torn off the face,
+      // thrown harder and heavier than droplets, counts scaling with speed
+      const shards = [];
+      const nShards = 2 + Math.floor(rng() * 3) + Math.round(3 * k);
+      const nFlakes = 2 + Math.floor(rng() * 2) + Math.round(5 * k);
+      for (let i = 0; i < nShards + nFlakes; i++) {
+        const skin = i >= nShards;
+        let ang;
+        if (edge === 'left') ang = (rng() - 0.5) * 1.4;
+        else if (edge === 'right') ang = Math.PI + (rng() - 0.5) * 1.4;
+        else if (edge === 'top') ang = Math.PI / 2 + (rng() - 0.5) * 1.4;
+        else if (edge === 'bottom') ang = -Math.PI / 2 + (rng() - 0.5) * 1.4;
+        else ang = rng() * Math.PI * 2;
+        const sp = (20 + rng() * 70) * (skin ? 1.2 : 1);
+        const flat = rng() < 0.5;
+        shards.push({
+          x: cx, y: cy,
+          vx: Math.cos(ang) * sp,
+          vy: Math.sin(ang) * sp,
+          life: 0.25 + rng() * 0.35,
+          c: skin ? SKIN[Math.floor(rng() * 3)] : BONE[Math.floor(rng() * 2)],
+          w: flat ? 2 : 1,
+          h: flat ? 1 : 2,
+          grav: skin ? 150 : 200,
+          dead: false,
+        });
+      }
+
+      const born = performance.now();
+      splats.push({ edge, dots, drips, drops, shards, born, lastT: born, step: 0, alpha: 1 });
+      if (!running) {
+        running = true;
+        requestAnimationFrame(draw);
+      }
+    }
+
+    function draw(now) {
+      let dirty = false;
+      for (let si = splats.length - 1; si >= 0; si--) {
+        const s = splats[si];
+        const age = (now - s.born) / 1000;
+        const dt = Math.min(0.05, (now - s.lastT) / 1000);
+        s.lastT = now;
+        const step = age < 2 ? 0 : 1 + Math.floor((age - 2) * 3);
+        s.alpha = age < 2 ? 1 : Math.max(0, 1 - Math.floor((age - 2) * 3) * 0.2);
+        if (s.alpha <= 0) {
+          splats.splice(si, 1);
+          dirty = true;
+          continue;
+        }
+        if (step !== s.step) {
+          s.step = step;
+          dirty = true;
+        }
+        if (age < 1.25) dirty = true;
+
+        for (const p of s.drops) {
+          if (p.dead) continue;
+          dirty = true;
+          p.vy += 150 * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.life -= dt;
+          if (p.life <= 0) {
+            p.dead = true;
+            const gx = Math.round(p.x);
+            const gy = Math.round(p.y);
+            if (gx >= 0 && gx < CW && gy >= 0 && gy < CH) s.dots.push([gx, gy, p.c]);
+          }
+        }
+
+        for (const p of s.shards) {
+          if (p.dead) continue;
+          dirty = true;
+          p.vy += p.grav * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.life -= dt;
+          if (p.life <= 0) {
+            p.dead = true;
+            for (let ix = 0; ix < p.w; ix++) {
+              for (let iy = 0; iy < p.h; iy++) {
+                const gx = Math.round(p.x) + ix;
+                const gy = Math.round(p.y) + iy;
+                if (gx >= 0 && gx < CW && gy >= 0 && gy < CH) s.dots.push([gx, gy, p.c]);
+              }
+            }
+          }
+        }
+      }
+
+      if (dirty) {
+        ctx.clearRect(0, 0, CW, CH);
+        for (const s of splats) paintSplat(s, now);
+        ctx.globalAlpha = 1;
+      }
+      if (splats.length) requestAnimationFrame(draw);
+      else {
+        running = false;
+        ctx.clearRect(0, 0, CW, CH);
+      }
+    }
+
+    function paintSplat(s, now) {
+      const grow = Math.min(1, (now - s.born) / 1000 / 1.2);
+      ctx.globalAlpha = s.alpha;
+      for (const [x, y, c] of s.dots) {
+        ctx.fillStyle = c;
+        ctx.fillRect(x, y, 1, 1);
+      }
+      for (const p of s.drops) {
+        if (p.dead) continue;
+        ctx.fillStyle = p.c;
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+      }
+      for (const p of s.shards) {
+        if (p.dead) continue;
+        ctx.fillStyle = p.c;
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), p.w, p.h);
+      }
+      for (const d of s.drips) {
+        const n = Math.floor(d.len * grow);
+        for (let i = 0; i < n; i++) {
+          ctx.fillStyle = COLORS[i > d.len * 0.6 ? 1 : 0];
+          if (s.edge === 'bottom') ctx.fillRect(d.x + i, d.y, 1, 1);
+          else ctx.fillRect(d.x, d.y + i, 1, 1);
+        }
+      }
+    }
+
+    return { addSplat, fit };
+  }
+
+  return { attach };
+});
